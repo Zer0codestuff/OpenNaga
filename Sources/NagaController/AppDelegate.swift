@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if snapshotPath != nil, let appearance = argument(after: "--snapshot-appearance") {
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         }
+        NSApp.setActivationPolicy(.accessory)
         ConfigManager.shared.load()
         installApplicationMenu()
 
@@ -60,7 +61,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             })
         }
         updateStatusItem()
-        MappingWindowController.shared.show()
+        if snapshotPath != nil || CommandLine.arguments.contains("--show-settings") {
+            MappingWindowController.shared.show()
+        }
+        NSLog("[Lifecycle] Ready policy=%ld visibleWindows=%ld statusItem=%d", NSApp.activationPolicy().rawValue,
+              NSApp.windows.filter { $0.isVisible }.count, statusItem != nil ? 1 : 0)
 
         if let path = snapshotPath {
             if let value = argument(after: "--snapshot-size") {
@@ -152,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hadAccessibilityPermission = accessibility
         if !permission.hasAccessibilityPermission() || !input {
             if EventTapManager.shared.isRunning { EventTapManager.shared.stop() }
-        } else if !EventTapManager.shared.isRunning {
+        } else if !EventTapManager.shared.isRunning && !RazerDeviceController.shared.isBusy {
             startRemappingIfPermitted()
         }
         updateStatusItem()
@@ -169,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ProcessInfo.processInfo.endActivity(activity)
             remappingActivity = nil
         }
-        statusItem?.button?.toolTip = active ? "OpenNaga · Remapping active" : "OpenNaga · Remapping paused"
+        statusItem?.button?.toolTip = OnboardProfileStore.isActive ? "OpenNaga · Profile saved in the mouse" : active ? "OpenNaga · Remapping active" : "OpenNaga · Remapping paused"
     }
 
     @objc private func togglePopover(_ sender: Any?) {

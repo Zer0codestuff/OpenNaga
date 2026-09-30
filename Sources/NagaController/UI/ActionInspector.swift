@@ -97,7 +97,11 @@ struct ActionInspector: View {
             Picker("Function", selection: Binding(get: { mouse }, set: { mouse = $0; persist() })) {
                 ForEach(MouseAction.allCases, id: \.rawValue) { Text($0.title).tag($0) }
             }
-            Text("Mouse buttons 4 and 5 send real clicks. Browsers on macOS ignore them, so there they are converted to Back and Forward automatically.")
+            Text(mouse == .dpiUp || mouse == .dpiDown
+                 ? "Hardware function: choose Save to Mouse to apply it. It changes the DPI stage inside the mouse, even when the app is closed."
+                 : model.onboardActive
+                    ? "Mouse buttons 4 and 5 stay standard clicks. Browsers may treat them as Back and Forward."
+                    : "Mouse buttons 4 and 5 send real clicks. Browsers on macOS ignore them, so there they are converted to Back and Forward automatically.")
                 .font(.callout).foregroundStyle(.secondary)
         case .system:
             systemEditor

@@ -30,7 +30,7 @@ private struct NagaPopover: View {
             }
             Toggle("Remapping", isOn: Binding(
                 get: { model.remappingEnabled }, set: model.setRemapping
-            )).toggleStyle(.switch).controlSize(.small)
+            )).toggleStyle(.switch).controlSize(.small).disabled(model.onboardActive || RazerDeviceController.shared.isBusy)
             HStack(spacing: 7) {
                 StatusDot(active: model.connected && model.remappingActive)
                 Text(model.serviceStatus)

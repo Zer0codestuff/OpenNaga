@@ -23,7 +23,20 @@ final class RazerDeviceController {
     func refresh() { submit(.refresh) }
     func setDPI(x: Int, y: Int) { submit(.dpi(x, y)) }
     func setPollingRate(_ hz: Int) { submit(.polling(hz)) }
-    func setDriverModeEnabled(_ enabled: Bool) { submit(.mode(enabled)) }
+    func setDriverModeEnabled(_ enabled: Bool) {
+        guard !OnboardProfileStore.isActive else { return }
+        submit(.mode(enabled))
+    }
+    func saveOnboard(_ plan: OnboardProfilePlan) {
+        guard !isBusy, !shuttingDown, plan.isSupported else { return }
+        EventTapManager.shared.stop()
+        submit(.onboard(plan))
+    }
+    func restoreOnboard() {
+        guard !isBusy, !shuttingDown else { return }
+        EventTapManager.shared.stop()
+        submit(.restoreOnboard)
+    }
 
     // The app must defer termination until this callback. Failed restores retain
     // the journal for an explicit recovery attempt on a later launch.
@@ -35,7 +48,7 @@ final class RazerDeviceController {
     func recoverOriginalMode() { submit(.recover) }
 
     private enum Operation: Sendable {
-        case refresh, dpi(Int, Int), polling(Int), mode(Bool), restore, recover
+        case refresh, dpi(Int, Int), polling(Int), mode(Bool), restore, recover, onboard(OnboardProfilePlan), restoreOnboard
     }
     private func submit(_ operation: Operation, completion: (@MainActor @Sendable () -> Void)? = nil) {
         guard !shuttingDown || completion != nil else { return }
@@ -59,6 +72,13 @@ final class RazerDeviceController {
                 self.driverModeEnabled = outcome.snapshot?.mode == 3
                 self.recoveryPending = outcome.recoveryPending
                 self.statusMessage = outcome.message
+                switch operation {
+                case .onboard, .restoreOnboard:
+                    if !self.shuttingDown, PermissionManager.shared.hasAccessibilityPermission(), PermissionManager.shared.hasInputMonitoringPermission() {
+                        EventTapManager.shared.start(listenOnly: !ConfigManager.shared.getRemappingEnabled())
+                    }
+                default: break
+                }
                 self.notify()
                 completion?()
             }
@@ -99,10 +119,20 @@ final class RazerDeviceController {
                 try transport.open()
                 connected = true
                 let session = RazerHardwareSession(transport: transport)
+                var onboardMessage: String?
                 switch operation {
                 case .refresh: break
                 case .dpi(let x, let y): try session.setDPI(x: x, y: y)
                 case .polling(let hz): try session.setPolling(hz)
+                case .onboard(let plan):
+                    guard !FileManager.default.fileExists(atPath: journalURL.path) else {
+                        throw RazerHardwareError.invalidValue("Restore the original driver mode first.")
+                    }
+                    try OnboardProfileStore.save(plan, session: session, identity: transport.identity)
+                    onboardMessage = "Profile \(plan.name) saved to the mouse. It keeps working after Quit."
+                case .restoreOnboard:
+                    try OnboardProfileStore.restore(session: session, identity: transport.identity)
+                    onboardMessage = "Previous assignments restored. Software remapping is available."
                 case .mode(let enabled):
                     let current = try session.readMode()
                     let target: UInt8 = enabled ? 3 : 0
@@ -143,7 +173,7 @@ final class RazerDeviceController {
                             : "A restore is pending from a previous session. Use Restore Original Mode.")
                         : "Hardware values read over USB."
                 return Outcome(connected: true, snapshot: snapshot,
-                               message: ([message] + snapshot.warnings).joined(separator: "\n"),
+                               message: ([onboardMessage ?? message] + snapshot.warnings).joined(separator: "\n"),
                                recoveryPending: recoveryPending)
             } catch {
                 return Outcome(connected: connected, snapshot: nil, message: error.localizedDescription,

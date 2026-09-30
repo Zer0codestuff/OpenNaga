@@ -2,7 +2,6 @@ import Cocoa
 
 final class MappingWindowController: NSWindowController, NSWindowDelegate {
     static let shared = MappingWindowController()
-    private var previousActivationPolicy: NSApplication.ActivationPolicy?
 
     private init() {
         let vc = MappingViewController()
@@ -31,11 +30,8 @@ final class MappingWindowController: NSWindowController, NSWindowDelegate {
     func show() {
         guard let window else { return }
 
-        let currentPolicy = NSApp.activationPolicy()
-        if currentPolicy != .regular {
-            previousActivationPolicy = currentPolicy
-            NSApp.setActivationPolicy(.regular)
-        }
+        // The menu bar app remains an accessory even while settings are open.
+        NSApp.setActivationPolicy(.accessory)
 
         window.delegate = self
         showWindow(nil)
@@ -43,9 +39,6 @@ final class MappingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        if let previous = previousActivationPolicy {
-            NSApp.setActivationPolicy(previous)
-            previousActivationPolicy = nil
-        }
+        NSApp.setActivationPolicy(.accessory)
     }
 }

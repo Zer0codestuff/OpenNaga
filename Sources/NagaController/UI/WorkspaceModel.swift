@@ -9,6 +9,8 @@ final class WorkspaceModel: ObservableObject {
     @Published var profile = ""
     @Published var profiles: [String] = []
     @Published var mapping: [Int: ActionType] = [:]
+    @Published var onboardActive = false
+    @Published var onboardName: String?
     @Published var remappingActive = false
     @Published var remappingEnabled = false
     @Published var connected = false
@@ -53,7 +55,9 @@ final class WorkspaceModel: ObservableObject {
         mapping = config.mappingForCurrentProfile()
         error = config.lastError
         deviceName = HIDListener.shared.connectedDeviceName ?? "No mouse detected"
-        remappingEnabled = config.getRemappingEnabled()
+        onboardActive = OnboardProfileStore.isActive
+        onboardName = OnboardProfileStore.savedName
+        remappingEnabled = config.getRemappingEnabled() && !onboardActive
         connected = HIDListener.shared.connectedDeviceName != nil
         transport = HIDListener.shared.transport
         permissionsGranted = PermissionManager.shared.hasAccessibilityPermission() && PermissionManager.shared.hasInputMonitoringPermission()
@@ -62,6 +66,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     var serviceStatus: String {
+        if onboardActive { return "Mouse memory: \(onboardName ?? "restore needed")" }
         if !remappingEnabled { return "Remapping paused" }
         if !permissionsGranted { return "Permissions needed" }
         if !remappingActive { return "Service unavailable" }
@@ -70,6 +75,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func setRemapping(_ value: Bool) {
+        guard !onboardActive, !RazerDeviceController.shared.isBusy else { return }
         ConfigManager.shared.setRemappingEnabled(value)
         if permissionsGranted { EventTapManager.shared.isRemappingEnabled = value }
         refresh()

@@ -79,7 +79,7 @@ struct SensitivityPane: View {
                         Toggle("Driver mode for the top buttons", isOn: Binding(
                             get: { device.driverModeEnabled },
                             set: { device.setDriverModeEnabled($0) }
-                        )).disabled(!available || device.recoveryPending)
+                        )).disabled(!available || device.recoveryPending || model.onboardActive)
                         Text("Optional. Lets the software handle the top DPI buttons on compatible devices. It can replace their built-in DPI function. Turn it off to restore normal mode.")
                             .font(.callout).foregroundStyle(.secondary)
                         if device.recoveryPending {
@@ -151,7 +151,7 @@ struct StatusPane: View {
                         Image(systemName: "menubar.rectangle").font(.title2).foregroundStyle(UIStyle.accent)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Keeps running in the background").font(.headline)
-                            Text("Close the window to keep OpenNaga in the menu bar. Your assignments keep working in other apps. To stop the service, turn off Remapping or choose Quit.")
+                            Text(model.onboardActive ? (model.onboardName == nil ? "The last save is incomplete. Restore the previous assignments from Mouse Memory." : "The profile saved in the mouse keeps working after Quit. To go back to software remapping, restore the previous assignments from Mouse Memory.") : "Close the window to keep OpenNaga in the menu bar. Your assignments keep working in other apps. To stop the service, turn off Remapping or choose Quit.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()

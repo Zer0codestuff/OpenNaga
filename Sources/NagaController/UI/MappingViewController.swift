@@ -27,6 +27,7 @@ struct NagaWorkspace: View {
     @ObservedObject private var model = WorkspaceModel.shared
     @State private var selectedButton = 1
     @State private var manageProfiles = false
+    @State private var showOnboard = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -72,8 +73,8 @@ struct NagaWorkspace: View {
                     StatusDot(active: model.connected && model.remappingActive)
                     Text(model.serviceStatus)
                     Spacer()
-                    Image(systemName: "menubar.rectangle")
-                    Text("Keeps running when you close the window")
+                    Image(systemName: model.onboardActive ? "memorychip" : "menubar.rectangle")
+                    Text(model.onboardActive ? (model.onboardName == nil ? "Mouse restore needed" : "Works even after Quit") : "Keeps running when you close the window")
                 }.font(.system(size: 11)).foregroundStyle(.secondary)
                     .padding(.horizontal, 20).frame(height: 32)
             }
@@ -82,6 +83,7 @@ struct NagaWorkspace: View {
             if CommandLine.arguments.contains("--snapshot") { Color(nsColor: .windowBackgroundColor) }
         }
         .tint(UIStyle.accent)
+        .sheet(isPresented: $showOnboard) { OnboardProfilePane() }
         .sheet(isPresented: $manageProfiles) { ProfileManagerPane() }
         .onAppear {
             model.refresh()
@@ -128,6 +130,8 @@ struct NagaWorkspace: View {
                 Toggle("Remapping", isOn: Binding(
                     get: { model.remappingEnabled }, set: model.setRemapping
                 )).toggleStyle(.switch).controlSize(.small).font(.system(size: 12))
+                    .disabled(model.onboardActive || RazerDeviceController.shared.isBusy)
+                if model.onboardActive { Text("Saved in mouse").font(.caption).foregroundStyle(.secondary) }
             }.padding(18)
         }.frame(width: 184).frame(maxHeight: .infinity)
             .background(SidebarMaterial())
@@ -144,7 +148,10 @@ struct NagaWorkspace: View {
             Picker("Profile", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
             }.frame(width: 205)
+            Button("Save to Mouse…") { showOnboard = true }
             Menu {
+                Button("Mouse Memory…") { showOnboard = true }
+                Divider()
                 Button("Manage Profiles…") { manageProfiles = true }
                 Divider()
                 Button("Import Profiles…") { model.importProfiles() }

@@ -19,7 +19,10 @@ final class ButtonMapper {
         self.workspaceActionSink = workspaceActionSink
     }
 
-    func hasMapping(buttonIndex: Int) -> Bool { mapping[buttonIndex] != nil }
+    func hasMapping(buttonIndex: Int) -> Bool {
+        if case .mouse(let action, _) = mapping[buttonIndex], action == .dpiUp || action == .dpiDown { return false }
+        return mapping[buttonIndex] != nil
+    }
 
     func updateMapping(_ newMapping: [Int: ActionType]) {
         releaseAll()

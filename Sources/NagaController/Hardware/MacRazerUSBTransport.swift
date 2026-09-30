@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import IOKit
 import IOKit.hid
 
@@ -10,6 +11,7 @@ import IOKit.hid
 // acquiring its exclusive user client can conflict with the system HID driver.
 // Apple API: https://developer.apple.com/documentation/iokit/iohiddevice_h
 final class MacRazerUSBTransport: RazerTransport {
+    private var lockFD: Int32 = -1
     private var device: IOHIDDevice?
     private var runLoop: CFRunLoop?
     private(set) var identity = "1532:00b4"
@@ -35,8 +37,19 @@ final class MacRazerUSBTransport: RazerTransport {
         guard supported.count == 1, let selected = supported.first else {
             throw RazerHardwareError.transport("USB interface missing or ambiguous. Connect a single Naga V2 HyperSpeed receiver.")
         }
+        // Serialize full sessions across diagnostic and GUI processes as well.
+        let lockURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("NagaController/hardware.lock")
+        try FileManager.default.createDirectory(at: lockURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let fd = Darwin.open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { throw RazerHardwareError.transport("Could not reserve communication with the mouse.") }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            Darwin.close(fd)
+            throw RazerHardwareError.transport("The mouse is busy with another OpenNaga operation. Try again.")
+        }
+        lockFD = fd
         let result = IOHIDDeviceOpen(selected, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard result == kIOReturnSuccess else { throw ioError("USB open", result) }
+        guard result == kIOReturnSuccess else { close(); throw ioError("USB open", result) }
         device = selected
         let loop = CFRunLoopGetCurrent()!
         runLoop = loop
@@ -117,7 +130,10 @@ final class MacRazerUSBTransport: RazerTransport {
         }
         device = nil
         runLoop = nil
+        if lockFD >= 0 { flock(lockFD, LOCK_UN); Darwin.close(lockFD); lockFD = -1 }
     }
+    deinit { close() }
+
     private func ioError(_ operation: String, _ code: IOReturn) -> RazerHardwareError {
         .transport("\(operation): IOKit error \(String(format: "0x%08x", code)). Check USB access and the Input Monitoring permission.")
     }

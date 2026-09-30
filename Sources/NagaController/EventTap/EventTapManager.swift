@@ -28,6 +28,7 @@ final class EventTapManager {
 
     func start(listenOnly: Bool) {
         stop()
+        let listenOnly = listenOnly || OnboardProfileStore.isActive
         isListeningOnly = listenOnly
 
         let types: [CGEventType] = [.keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]

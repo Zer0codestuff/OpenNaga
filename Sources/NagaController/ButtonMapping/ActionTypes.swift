@@ -16,7 +16,7 @@ enum ActionType: Equatable {
 
 enum MouseAction: String, Codable, CaseIterable {
     case browserBack, browserForward, leftClick, rightClick, middleClick, button4, button5
-    case scrollUp, scrollDown, scrollLeft, scrollRight
+    case scrollUp, scrollDown, scrollLeft, scrollRight, dpiUp, dpiDown
 
     var title: String {
         switch self {
@@ -31,6 +31,8 @@ enum MouseAction: String, Codable, CaseIterable {
         case .scrollDown: return "Scroll down"
         case .scrollLeft: return "Scroll left"
         case .scrollRight: return "Scroll right"
+        case .dpiUp: return "DPI up"
+        case .dpiDown: return "DPI down"
         }
     }
 

@@ -156,6 +156,30 @@ enum HardwareProtocolTests {
         try check(fake.requests.map { $0[1] } == [0x1f, 0xff], "Mode GET/SET transaction asymmetry")
         fake.replies = []
         try rejects("all snapshot reads fail") { _ = try session.readSnapshot() }
+        let onboard = try RazerOnboardBindings.readCommand(profile: 1, buttonID: 0x40)
+        try check(onboard.arguments == [1, 64, 0, 0, 0, 0, 0, 0, 0, 0], "Onboard stored-bank query")
+        try check(onboard.id == 0x8c && onboard.commandClass == 2 && onboard.transaction == 0x1f, "Onboard query header")
+        // Captured on the user's 1532:00b4 receiver, including physical grid order.
+        let buttonIDs: [UInt8] = [21, 1, 2, 3, 52, 53, 11, 12, 64, 67, 70, 73, 65, 68, 71, 74, 66, 69, 72, 75, 9, 10]
+        try check(RazerOnboardBindings.decodeButtonIDs(buttonIDs) == Array(buttonIDs.dropFirst()), "Captured button enumeration")
+        for invalid in [[], [0], [22] + Array(repeating: UInt8(1), count: 21), [2, 1, 1] + Array(repeating: UInt8(0), count: 19), [1] + Array(repeating: UInt8(0), count: 21)] {
+            try rejects("Malformed onboard inventory") { _ = try RazerOnboardBindings.decodeButtonIDs(invalid) }
+        }
+        let factory: [UInt8] = [1, 64, 0, 2, 1, 0, 30, 0, 0, 0]
+        try check(RazerOnboardBinding(bytes: factory, profile: 1, buttonID: 64).bytes == factory, "Preserve factory descriptor including nonstandard length")
+        for field in [0, 1, 2] {
+            var wrong = factory
+            wrong[field] ^= 1
+            try rejects("Onboard identity field") { _ = try RazerOnboardBinding(bytes: wrong, profile: 1, buttonID: 64) }
+        }
+        try rejects("Truncated onboard descriptor") { _ = try RazerOnboardBinding(bytes: Array(factory.dropLast()), profile: 1, buttonID: 64) }
+        fake.requests = []
+        try rejects("Unsupported bank") { _ = try RazerOnboardBindings.read(session: session, profile: 2) }
+        try check(fake.requests.isEmpty, "Unsupported bank makes no USB request")
+        fake.replies = [try reply(RazerOnboardBindings.getButtonIDs, [1, 64] + Array(repeating: 0, count: 20)), try reply(onboard, factory)]
+        let bindings = try RazerOnboardBindings.read(session: session, profile: 1)
+        try check(bindings.count == 1 && bindings[0].bytes == factory, "Read stored descriptor")
+        try check(fake.requests.allSatisfy { $0[7] & 0x80 != 0 }, "Onboard inspection never changes the mouse")
         return passed
     }
 }

@@ -8,13 +8,13 @@ Naming: the shipped app is `OpenNaga.app` (executable `OpenNaga`, display name O
 
 ## Architecture
 
-- `Sources/NagaController/main.swift`: CLI switches (`--diagnose`, `--diagnose-file <path>`, `--verify-hardware`, `--snapshot <png>`), otherwise starts `AppDelegate`.
+- `Sources/NagaController/main.swift`: CLI switches (`--diagnose`, `--diagnose-file <path>`, `--verify-hardware`, `--inspect-onboard`, `--save-onboard-profile`, `--restore-onboard-profile`, `--snapshot <png>`), otherwise starts `AppDelegate`.
 - `AppDelegate`: starts `HIDListener`, `RazerDeviceController.refresh()`, the event tap (only when Accessibility and Input Monitoring are granted), a 2 s permission poll, menu bar item and popover; defers quit until `restoreOriginalMode` completes.
 - `ButtonMapping/`: `ActionType` (system, legacy audio, mouse, disabled, keySequence, application, systemCommand, textSnippet, macro, profileSwitch), `ButtonMapper` (press/hold/release semantics, synthetic marker `eventSourceUserData`), `KeyboardLayoutShortcut` (browser back/forward per layout). `SystemAction` groups native system controls; `MacSystemShortcut` reads configured macOS shortcuts without changing preferences.
 - `EventTap/EventTapManager`: CGEvent tap; consumes an event only if `HIDListener.consume` matches a HID edge within 25 ms. Logical indices: 1..12 side grid, 13 DPI up, 14 DPI down, 15 wheel left, 16 wheel right, 17 middle, 18 left, 19 right.
 - `HID/HIDListener` + `HID/InputModel`: IOHIDManager on a dedicated thread, pure decoders (`NagaInput`, `InputEdgeMatcher`, `DriverButtonState`). Enumeration includes vendor `1532` and exact BLE identity `068e:00b5`; callbacks additionally validate Naga identity.
-- `Hardware/`: `RazerProtocol` (90-byte report codec, CRC, transaction IDs), `MacRazerUSBTransport` (IOHID feature reports on the mouse collection with 90-byte feature size), `RazerDeviceController` (`@MainActor` facade, serial worker queue, driver-mode recovery journal in `~/Library/Application Support/NagaController/driver-mode-recovery.json`).
-- `UI/`: `MappingViewController` (NSHostingController with `NagaWorkspace`), `ActionInspector`, `SettingsPanes` (Sensitivity, Status, ProfileManager), `MainViewController` (popover), `MappingWindowController`.
+- `Hardware/`: `RazerProtocol` (90-byte report codec, CRC, transaction IDs), `MacRazerUSBTransport` (IOHID feature reports on the mouse collection with 90-byte feature size), `RazerDeviceController` (`@MainActor` facade, serial worker queue, driver-mode recovery journal in `~/Library/Application Support/NagaController/driver-mode-recovery.json`), a nonblocking `hardware.lock` so GUI and CLI sessions never interleave. Onboard memory: `RazerOnboardBindings` (21-control inventory and 10-byte descriptors, class 2 commands 0x84/0x8c), `OnboardProfilePlan` (actions to USB HID function blocks; unsupported actions block the whole save), `OnboardProfileStore` (writes only changed bindings to stored bank 1 via 0x0c, verifies bank 1 and active bank 0, keeps the original assignments in `onboard-profile.json`, rolls back on failure; the backup follows the receiver model `1532:00b4`, not the USB port).
+- `UI/`: `MappingViewController` (NSHostingController with `NagaWorkspace`), `ActionInspector`, `SettingsPanes` (Sensitivity, Status, ProfileManager), `OnboardProfilePane` (Mouse Memory sheet), `MainViewController` (popover), `MappingWindowController`.
 - `Utils/ConfigManager`: profiles JSON, auto-save, `didChangeNotification`, `lastError`.
 
 ## Build, run, test
@@ -23,10 +23,11 @@ Naming: the shipped app is `OpenNaga.app` (executable `OpenNaga`, display name O
 swift build                      # debug
 bash Scripts/make_dev_certificate.sh   # once: self-signed "NagaController Dev" identity, keeps TCC grants across rebuilds
 bash Scripts/build_app.sh        # release bundle ./OpenNaga.app, signed with the dev identity if present, else ad-hoc
-bash Scripts/test.sh             # 745 dependency-free checks (XCTest is not available with CLI tools only)
+bash Scripts/test.sh             # 808 dependency-free checks (XCTest is not available with CLI tools only)
 bash Scripts/make_dmg.sh         # ad-hoc signed release DMG (OpenNaga-v<version>.dmg, git-ignored)
 gh release create vX.Y.Z OpenNaga-vX.Y.Z.dmg --title "OpenNaga X.Y.Z" --notes-file <file>   # publish
 open OpenNaga.app --args --diagnose-file /tmp/naga.json   # read-only hardware probe
+open -n OpenNaga.app --args --inspect-onboard --diagnose-file /tmp/o.json   # read-only onboard dump (quit the GUI first)
 ./OpenNaga.app/Contents/MacOS/OpenNaga --snapshot /tmp/ui.png  # UI render without hardware
 ```
 
@@ -34,73 +35,50 @@ open OpenNaga.app --args --diagnose-file /tmp/naga.json   # read-only hardware p
 
 ## Current status (2026-09-30)
 
-- Version 2.2.0, build 6: rename to OpenNaga plus English UI, released from branch `english-ui` (worktree `../NagaController-english`). The main checkout `../RazerNagaV2` still holds uncommitted onboard-profile work based on 2.1.1, with Italian strings; it must be rebased onto 2.2.0, translated and renamed before it can ship.
-- Version 2.1.1, build 5, is published as GitHub release v2.1.1 with `NagaController-v2.1.1.dmg` (Apple Silicon, ad-hoc signed, not notarized). It adds Bluetooth detection on top of 2.1.0 (Sistema, native UI, keyboard picker, background/hotplug fixes).
-- The Bluetooth fix is installed in `/Applications/NagaController.app` with the existing development signing identity. Release build and 745 dependency-free checks pass. Startup logs confirm `Naga connected via Bluetooth Low Energy` and an active blocking event tap. The profile JSON stayed byte-identical across installation and relaunch; physical Bluetooth button actions and switching transports still need user testing.
-- Sistema checked in isolated light/dark snapshots at 980 x 700, plus the missing-shortcut state at 1180 x 780. Live UI automation was blocked by the terminal's Accessibility permission. The installed executable matches the release build, and the user profile JSON remained byte-identical after snapshots and relaunch.
-- Earlier UI checks covered native light/dark appearance, background process survival and the active event tap. On September 9, USB receiver read and same-value write/readback passed: 1600 DPI on both axes, 500 Hz, battery 100%, normal mode 0, no warnings. Physical remapping and driver-mode restore still require user testing.
+- Single branch: everything lives on `main`. Feature branches and extra worktrees were removed after 2.3.0; do not create long-lived branches.
+- Version 2.3.0, build 7: onboard memory (Save to Mouse / Restore Previous Assignments) ported from the Italian 2.1.1-based work onto 2.2.0, translated, renamed to OpenNaga. Published as GitHub release v2.3.0 with `OpenNaga-v2.3.0.dmg` (Apple Silicon, ad-hoc signed, not notarized).
+- 808 dependency-free checks pass; release build has no warnings or errors. README screenshots re-rendered in light and dark with the synthetic `Everyday` profile (`.build/showcase-home`, `CFFIXED_USER_HOME`).
+- Hardware evidence: on 2026-09-11 the Test profile was written and read back (21 descriptors), Escape on side button 1 survived a power cycle. On 2026-09-30 the DPI buttons were rewritten to DPI up/down, all 21 stored and active descriptors verified, and the user tested the saved profile over Bluetooth with the app closed and reported it works (tentative, not per-button).
+- The user's journal `onboard-profile.json` was rebound from USB location `18026496` to `18022400` by hand before the model-based check existed; the original is `onboard-profile.port-0x01131000.bak.json` in Application Support.
 - `--diagnose` run from a terminal fails with `0xe00002e2` (kIOReturnNotPermitted): the launching process needs Input Monitoring. Use `open -n OpenNaga.app --args --diagnose-file <path>` instead.
-- Worktrees `../naga-worktree-{input,ui,hardware}` on branches `work/*` hold the sub-agent originals; they are fully merged and can be removed with `git worktree remove`.
 
 ## Recent changes
 
-- 2.2.0 rename: user-visible name OpenNaga (window, sidebar, popover, menus, tooltips, export file `OpenNaga-profiles.json`, Info.plist `CFBundleName`/`CFBundleDisplayName`/`CFBundleExecutable`), build and DMG scripts produce `OpenNaga.app` / `OpenNaga-v<version>.dmg`. README rewritten with a Razer non-affiliation note and upgrade steps; CONTRIBUTING and SECURITY point to `Zer0codestuff/OpenNaga`. Removed the upstream author's `SETUP-INSTRUCTIONS.md`, `dmg-assets/setup-app-icon-and-dmg-simple.sh` and `dmg-background.png` (Developer ID flow never used here). Em dashes removed from BatteryMonitor logs.
-- English UI (branch `english-ui`, based on v2.1.1, worktree `../NagaController-english`): every user-facing string, menu, error and the Info.plist usage text translated; the default profile `Navigazione` is now `Navigation`. Persisted identifiers are unchanged, so existing profiles load as before. Display-only enum raw values (`EditorKind`, `WorkspaceSection`, `SystemActionGroup`, `KeyboardKeyGroup`) changed. README shows `Documentation/screenshot-{light,dark}.png`, rendered with `--snapshot` and a synthetic `Everyday` profile under `.build/showcase-home` (`CFFIXED_USER_HOME`). The uncommitted onboard-profile work in the main checkout still has Italian strings and needs translating when it is merged.
-
-- Fixed Bluetooth enumeration and callback filtering for the observed `Naga V2 HS` identity `068e:00b5`. Previously both gates required vendor `1532`, so macOS saw the mouse but NagaController excluded it. `IOHIDManagerSetDeviceMatchingMultiple` now includes the exact BLE pair without opening unrelated products under vendor `068e`. The live BLE descriptor includes a standard keyboard collection, report ID 6. Existing input decoding, profile storage and USB hardware controls are unchanged.
-- Added 15 identity/enumeration regression checks, covering BLE with the short or missing name, unrelated devices, existing Razer name matching and USB receiver detection. The pre-fix installed app and scoped runtime log are in `.build/bluetooth-install.uqz61mjj/`.
-
-- Sistema replaces the Audio editor with 25 functions in six categories: audio, playback, brightness, screenshots, windows/spaces, and tools. Tools include Spotlight, Finder, System Settings, Notification Center and Do Not Disturb. Selection saves immediately; Prova runs the selected function. Shell commands remain separate.
-- System actions run once per physical press. Media events use tagged down/up pairs; keyboard actions honor configured macOS shortcuts, and app switching explicitly releases Command. Disabled/unassigned shortcuts show setup guidance. Spotlight opens directly because its keyboard shortcut may be disabled.
-- Legacy `audio` JSON remains readable and is not migrated on load. Its earlier volume and mute implementation was tested live before this change. `Tests/SystemActionTests.swift` adds 305 checks for the catalog, event encoding, press/release behavior, shortcut overrides, legacy preservation and mixed-profile import/export.
-- Sistema snapshots use `CFFIXED_USER_HOME` with synthetic profiles under `.build/system-ui-home`, without starting hardware/input services or changing real profiles. The pre-update installed bundle is preserved at `.build/system-install.TDzXAb/NagaController.app`.
-
-- Fixed side-photo hover always highlighting button 12. One continuous pointer tracker resolves the cursor against the actual button polygons, accounting for image centering and scaling. Live checks covered buttons 3 and 5 and the empty mouse body; 26 regression checks cover all 12 targets at two sizes.
-
-- `Tasti` replaces the text editor with `KeyboardKeyCatalog` and `KeyboardKeySelector`, physical key codes, current-layout labels, modifiers and local shortcut recording. Existing text actions remain unchanged until replaced by the user. Multi-step sequences remain editable.
-- `WorkspaceModel`, `MouseWorkspace` and adaptive `UIStyle` provide a native sidebar, a mouse photo with 12 polygon targets, top controls, and a separate assignment inspector. PNG assets with real alpha and provenance are in `Resources/Mouse/`.
-- Closing the window retains the menu-bar service. A scoped ProcessInfo activity prevents App Nap while remapping is active and still permits system sleep. Permission and active-service states are shown separately.
-- A previous-session recovery journal was cleared through the explicit restore command on September 9. The receiver was already in normal mode 0, so a driver-to-normal transition remains unverified.
-- Hardware state refreshes after HID connection name or transport changes. Refreshes are debounced and wait for active hardware operations; button events do not trigger USB reads. Physical unplug/replug validation is pending.
-- Verification details and light/dark screenshots are in `Documentation/verification-2026-09-08.md`. Profiles were restored after temporary UI tests.
-
-- Mouse actions `button4`/`button5`: when the frontmost app is a browser (`MouseAction.browserBundlePrefixes`) they are converted to `browserBack`/`browserForward`, because Safari and Chrome on macOS ignore mouse buttons 4/5. Real clicks are still sent elsewhere. `ButtonMapper.frontmostBundleIdentifier` is injectable for tests.
-- `KeyboardLayoutShortcut.browserStroke`: brackets are used only when reachable without Option; otherwise ⌘← / ⌘→ (the user's layout is "Italian - Pro", where `[` needs Option).
-- Version bumped to 2.0.0 (`CFBundleVersion` 3). GitHub release v2.0.0 published with `NagaController-v2.0.0.dmg` built by `Scripts/make_dmg.sh`. The stale tracked `NagaController-v0.1.0.dmg` was removed from git; root DMGs are now ignored.
-
-- Deleted emptied legacy UI files (`ActionEditorViewController`, `GlassyBatteryView`, `MouseMappingView`).
-- `PermissionManager`: added `ensureInputMonitoringPermission()` and `requestMissingPermissions()`; the app now requests both permissions at launch and before opening the corresponding System Settings pane, so it appears in the Privacy lists.
-- `RazerHardwareSession.readMode()`: retries the mode query with transaction 0x1f when the OpenRazer 0xff variant returns status 4 (timeout), which is what this receiver did during on-device probes.
-- `Scripts/make_dev_certificate.sh` added; `build_app.sh` auto-selects the "NagaController Dev" identity. Ad-hoc builds lost Accessibility and Input Monitoring after every rebuild (designated requirement was the cdhash).
-- On-device verification with `--diagnose --verify-hardware`: DPI 1600/1600 and polling 500 Hz read, written back and re-read successfully; battery 100%.
-- README rewritten for 2.0.0.
+- 2.3.0: onboard memory. `Save to Mouse…` button next to the profile picker and `Mouse Memory…` menu item open `OnboardProfilePane`. Saving is explicit only (never on edit, profile switch, startup, refresh or quit). While a saved profile is active, software interception and driver mode are disabled; restoring the backup re-enables them. DPI up/down mouse actions exist only as hardware functions (software mapper ignores them). Onboard buttons 4/5 stay standard mouse buttons (user choice, for games). Backup identity now compares vendor:product only, because moving the dongle to another hub/port blocked save and restore.
+- 2.2.0: rename to OpenNaga and English UI. Persisted identifiers unchanged; the default profile `Navigazione` became `Navigation`.
+- 2.1.x: Bluetooth identity `068e:00b5` detection, System actions catalog (25 functions), native UI with mouse photo targets, keyboard key picker, background and hotplug fixes.
 
 ## Installed copy
 
-The user runs `/Applications/NagaController.app` (local onboard-enabled build, not 2.2.0, bundle id `com.zer0codestuff.NagaController`). The old upstream 0.1.0 (`com.example.NagaController`) was removed from `/Applications` together with its Accessibility and Input Monitoring grants and its UserDefaults. To install 2.2.0 or later, quit and delete `/Applications/NagaController.app`, then copy `./OpenNaga.app` to `/Applications`.
+The user still runs `/Applications/NagaController.app`, a local onboard build from 2026-09-11 (bundle id `com.zer0codestuff.NagaController`). It predates the `dpiUp`/`dpiDown` actions, cannot decode the user's `profiles.json` and silently falls back to the bundled Default profile. Replace it with 2.3.0: quit it, delete it, copy `./OpenNaga.app` to `/Applications`. Profiles and permissions carry over (same bundle id and signing identity).
 
 ## Preferences and constraints
 
-- Everything in English: user-facing strings, code, comments, docs, commit messages. The UI was translated from Italian on 2026-09-29 (branch `english-ui`); do not reintroduce Italian strings.
+- Everything in English: user-facing strings, code, comments, docs, commit messages. Do not reintroduce Italian strings.
 - Native macOS light/dark appearance with restrained Razer green accents. Preserve transparent PNG alpha and the interactive mouse photo.
 - No em dashes anywhere.
-- MIT only: protocol knowledge from OpenRazer docs / PR 2850, no GPL code copied; OpenMouse is unlicensed, do not copy.
-- Never change hardware settings on init or refresh; driver mode only through the explicit toggle, always journaled and restored.
-- Button profiles are stored on the Mac and require the app to run. Do not describe them as written to the mouse's onboard memory.
+- MIT only: protocol knowledge from OpenRazer docs / PR 2850 and public protocol notes, no GPL code copied; OpenMouse is unlicensed, do not copy.
+- Never change hardware settings on init or refresh; driver mode only through the explicit toggle, always journaled and restored. Onboard writes only on explicit Save or Restore, always with a backup.
+- Local profiles are saved on the Mac; only an explicit Save to Mouse writes one profile to the mouse. Never describe edits or profile selection as synchronized to the mouse. Sequences, macros, scripts, app launch, profile switch and Fn shortcuts need the app.
 - Do not claim signing or notarization that does not exist.
+- The project is being promoted in Razer communities: keep README accurate, honest about what is verified, and free of filler.
 
 ## Known issues / next steps
 
-- Pending on-device verification: side button remap and release timing, browser back/forward, button 4/5, wheel tilt, driver mode toggle and restore, USB unplug/replug. Bluetooth connection detection and event-tap startup are verified; physical Bluetooth remapping and Bluetooth/dongle transitions are not.
-- New system actions still need live testing with the mouse. Do Not Disturb has no assigned shortcut on this Mac; the inspector links to keyboard settings for setup. Brightness depends on display support for macOS brightness keys, and media keys depend on the playback app.
-- `onChange(of:perform:)` deprecation warnings remain because the deployment target is macOS 13.
+- Not notarized: users see a Gatekeeper warning. A Developer ID and notarization would remove it.
+- Pending physical checks: per-button onboard verification (wheel tilt in particular), software remapping over Bluetooth, driver mode toggle and restore, USB unplug/replug.
+- System actions: Do Not Disturb needs a user-assigned shortcut; brightness depends on display support; media keys depend on the playback app.
+- `onChange(of:perform:)` deprecation is tolerated because the deployment target is macOS 13.
 
 ## Do not
 
 - Do not commit or push without an explicit request.
+- Do not create feature branches or extra worktrees; work on `main`.
 - Do not rename the bundle id, the Application Support folder or the dev signing identity; that would drop permissions and profiles.
 - Do not reintroduce Italian user-facing strings or the NagaController name in the UI.
 - Do not open the receiver with IOUSBHost exclusive access (conflicts with the system HID driver).
 - Do not reintroduce the legacy neon card UI or global keyboard interception outside explicit shortcut recording.
 - Do not add permanent stub models for UI compilation.
-- Do not change macOS keyboard shortcuts automatically. Lock, sleep, shutdown and restart are outside the agreed Sistema catalog.
+- Do not change macOS keyboard shortcuts automatically. Lock, sleep, shutdown and restart are outside the agreed System catalog.
+- Do not write mouse flash on edits, startup, refresh, profile selection or quit. Do not delete `onboard-profile.json` to bypass recovery.
+- Do not translate onboard mouse buttons 4/5 to browser shortcuts.

@@ -10,7 +10,9 @@ struct TestRunner {
             print("System actions: \(system) checks passed")
             let hardware = try HardwareProtocolTests.run()
             print("Hardware protocol: \(hardware) checks passed")
-            print("PASS: \(core + system + hardware) checks")
+            let onboard = try OnboardProfileTests.run()
+            print("Onboard profiles: \(onboard) checks passed")
+            print("PASS: \(core + system + hardware + onboard) checks")
         } catch {
             fputs("FAIL: \(error)\n", stderr)
             exit(1)
