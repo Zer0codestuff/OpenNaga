@@ -10,17 +10,17 @@ struct MouseWorkspace: View {
         GeometryReader { geometry in
             ScrollView {
                 VStack(spacing: 16) {
-                    Picker("Vista del mouse", selection: $topView) {
-                        Text("Laterale").tag(false)
-                        Text("Superiore").tag(true)
+                    Picker("Mouse view", selection: $topView) {
+                        Text("Side").tag(false)
+                        Text("Top").tag(true)
                     }.pickerStyle(.segmented).labelsHidden().frame(width: 232)
                     MouseDiagram(selectedButton: $selectedButton, topView: topView)
                         .frame(height: max(220, min(440, geometry.size.height - 315)))
                     HStack {
-                        Text(topView ? "Pulsanti superiori" : "Pannello a 12 pulsanti")
+                        Text(topView ? "Top buttons" : "12-button side panel")
                             .font(.system(size: 12, weight: .semibold))
                         Spacer()
-                        Text("Seleziona sulla foto o nell'elenco")
+                        Text("Select on the photo or in the list")
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: topView ? 2 : 3), spacing: 6) {
@@ -44,7 +44,7 @@ struct MouseWorkspace: View {
                     .clipShape(RoundedRectangle(cornerRadius: 5))
                 VStack(alignment: .leading, spacing: 2) {
                     if index >= 13 { Text(buttonName(index)).font(.system(size: 11, weight: .medium)).lineLimit(1) }
-                    Text(model.mapping[index]?.displayName ?? "Originale")
+                    Text(model.mapping[index]?.displayName ?? "Original")
                         .font(.system(size: 11)).foregroundStyle(index >= 13 ? .secondary : .primary)
                         .lineLimit(1)
                 }
@@ -57,8 +57,8 @@ struct MouseWorkspace: View {
                     lineWidth: model.activeButton == index ? 2 : 1))
                 .contentShape(Rectangle())
         }.buttonStyle(.plain)
-            .help("\(buttonName(index)): \(model.mapping[index]?.displayName ?? "Originale")")
-            .accessibilityLabel("\(buttonName(index)), \(model.mapping[index]?.displayName ?? "Originale")")
+            .help("\(buttonName(index)): \(model.mapping[index]?.displayName ?? "Original")")
+            .accessibilityLabel("\(buttonName(index)), \(model.mapping[index]?.displayName ?? "Original")")
             .accessibilityAddTraits(selectedButton == index ? [.isSelected] : [])
     }
 }
@@ -125,7 +125,7 @@ struct MouseDiagram: View {
                         .frame(width: size.width, height: size.height)
                         .accessibilityHidden(true)
                 } else {
-                    Label("Foto del mouse non disponibile", systemImage: "computermouse")
+                    Label("Mouse photo unavailable", systemImage: "computermouse")
                         .foregroundStyle(.secondary)
                 }
                 if topView {
@@ -142,7 +142,7 @@ struct MouseDiagram: View {
                                 .contentShape(HotspotShape(points: hotspot.points))
                         }.buttonStyle(.plain).frame(width: size.width, height: size.height)
                             .help(buttonName(hotspot.id))
-                            .accessibilityLabel("Seleziona \(buttonName(hotspot.id))")
+                            .accessibilityLabel("Select \(buttonName(hotspot.id))")
                     }
                 }
             }.frame(width: geometry.size.width, height: geometry.size.height)
@@ -186,7 +186,7 @@ struct MouseDiagram: View {
                         .overlay(Circle().stroke(Color.white.opacity(0.75), lineWidth: model.activeButton == index ? 2.5 : 1))
                 }.buttonStyle(.plain)
                     .position(x: x * size.width, y: y * size.height)
-                    .help(buttonName(index)).accessibilityLabel("Seleziona \(buttonName(index))")
+                    .help(buttonName(index)).accessibilityLabel("Select \(buttonName(index))")
             }
         }.frame(width: size.width, height: size.height)
     }

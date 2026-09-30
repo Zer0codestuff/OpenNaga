@@ -14,7 +14,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var connected = false
     @Published var permissionsGranted = false
     @Published var transport: String?
-    @Published var deviceName = "Nessun mouse rilevato"
+    @Published var deviceName = "No mouse detected"
     @Published var error: String?
     @Published var revision = 0
     @Published var activeButton: Int?
@@ -52,7 +52,7 @@ final class WorkspaceModel: ObservableObject {
         profiles = config.availableProfiles()
         mapping = config.mappingForCurrentProfile()
         error = config.lastError
-        deviceName = HIDListener.shared.connectedDeviceName ?? "Nessun mouse rilevato"
+        deviceName = HIDListener.shared.connectedDeviceName ?? "No mouse detected"
         remappingEnabled = config.getRemappingEnabled()
         connected = HIDListener.shared.connectedDeviceName != nil
         transport = HIDListener.shared.transport
@@ -62,11 +62,11 @@ final class WorkspaceModel: ObservableObject {
     }
 
     var serviceStatus: String {
-        if !remappingEnabled { return "Rimappatura in pausa" }
-        if !permissionsGranted { return "Permessi da concedere" }
-        if !remappingActive { return "Servizio non disponibile" }
-        if !connected { return "In attesa del mouse" }
-        return "Rimappatura attiva"
+        if !remappingEnabled { return "Remapping paused" }
+        if !permissionsGranted { return "Permissions needed" }
+        if !remappingActive { return "Service unavailable" }
+        if !connected { return "Waiting for the mouse" }
+        return "Remapping active"
     }
 
     func setRemapping(_ value: Bool) {
@@ -97,7 +97,7 @@ final class WorkspaceModel: ObservableObject {
     func exportProfiles() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "NagaController-profili.json"
+        panel.nameFieldStringValue = "OpenNaga-profiles.json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try ConfigManager.shared.exportAllProfiles(to: url) }
         catch { self.error = error.localizedDescription }

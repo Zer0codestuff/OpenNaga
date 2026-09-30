@@ -20,54 +20,54 @@ struct SensitivityPane: View {
             VStack(alignment: .leading, spacing: 24) {
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Sensibilità del sensore").font(.title2.weight(.semibold))
-                        Text("Le impostazioni hardware cambiano solo quando le applichi.")
+                        Text("Sensor sensitivity").font(.title2.weight(.semibold))
+                        Text("Hardware settings change only when you apply them.")
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button { device.refresh() } label: { Label("Aggiorna", systemImage: "arrow.clockwise") }
+                    Button { device.refresh() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                         .disabled(device.isBusy)
                 }
                 if !device.isConnected {
-                    Label("Controllo hardware non disponibile. Collega il ricevitore USB del Naga V2 HyperSpeed.",
+                    Label("Hardware control unavailable. Connect the Naga V2 HyperSpeed USB receiver.",
                           systemImage: "cable.connector").foregroundStyle(.secondary)
                 }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("DPI").font(.headline)
-                        Text("Valore letto: X \(device.dpiX.map(String.init) ?? "non disponibile") · Y \(device.dpiY.map(String.init) ?? "non disponibile")")
+                        Text("Current value: X \(device.dpiX.map(String.init) ?? "unavailable") · Y \(device.dpiY.map(String.init) ?? "unavailable")")
                             .font(.callout).foregroundStyle(.secondary)
                         HStack {
-                            TextField("Asse X", text: Binding(get: { dpiX }, set: { dpiX = $0; editedDPI = true })).frame(width: 140)
-                            TextField("Asse Y", text: Binding(get: { dpiY }, set: { dpiY = $0; editedDPI = true })).frame(width: 140)
+                            TextField("X axis", text: Binding(get: { dpiX }, set: { dpiX = $0; editedDPI = true })).frame(width: 140)
+                            TextField("Y axis", text: Binding(get: { dpiY }, set: { dpiY = $0; editedDPI = true })).frame(width: 140)
                             Spacer()
-                            Button("Applica DPI") {
+                            Button("Apply DPI") {
                                 guard let x = Int(dpiX), let y = Int(dpiY), validDPI else { return }
                                 device.setDPI(x: x, y: y)
                                 editedDPI = false
                             }.disabled(!available || !validDPI || device.dpiX == nil || device.dpiY == nil)
                         }
                         HStack {
-                            Text("Predefiniti").foregroundStyle(.secondary)
+                            Text("Presets").foregroundStyle(.secondary)
                             ForEach([400, 800, 1600, 3200, 6400], id: \.self) { value in
                                 Button("\(value)") { dpiX = String(value); dpiY = String(value); editedDPI = true }
                             }
                         }
-                        Text("Da 100 a 30.000 DPI per asse. I predefiniti compilano i campi, non modificano il mouse.")
+                        Text("100 to 30,000 DPI per axis. Presets fill in the fields without changing the mouse.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("Frequenza di aggiornamento").font(.headline)
-                        Text(device.pollingRate.map { "Valore letto: \($0) Hz" } ?? "Valore non disponibile")
+                        Text("Polling rate").font(.headline)
+                        Text(device.pollingRate.map { "Current value: \($0) Hz" } ?? "Value unavailable")
                             .foregroundStyle(.secondary)
                         HStack {
-                            Picker("Frequenza", selection: Binding(get: { rate }, set: { rate = $0; editedRate = true })) {
+                            Picker("Rate", selection: Binding(get: { rate }, set: { rate = $0; editedRate = true })) {
                                 ForEach([125, 500, 1000], id: \.self) { Text("\($0) Hz").tag($0) }
                             }.pickerStyle(.segmented).frame(maxWidth: 340)
                             Spacer()
-                            Button("Applica frequenza") {
+                            Button("Apply Rate") {
                                 device.setPollingRate(rate)
                                 editedRate = false
                             }.disabled(!available || device.pollingRate == nil)
@@ -76,16 +76,16 @@ struct SensitivityPane: View {
                 }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 12) {
-                        Toggle("Modalità driver per i pulsanti superiori", isOn: Binding(
+                        Toggle("Driver mode for the top buttons", isOn: Binding(
                             get: { device.driverModeEnabled },
                             set: { device.setDriverModeEnabled($0) }
                         )).disabled(!available || device.recoveryPending)
-                        Text("Opzionale. Consente al software di gestire i pulsanti DPI superiori sui dispositivi compatibili. Può sostituire la loro funzione DPI integrata. Disattivala per ripristinare la modalità normale.")
+                        Text("Optional. Lets the software handle the top DPI buttons on compatible devices. It can replace their built-in DPI function. Turn it off to restore normal mode.")
                             .font(.callout).foregroundStyle(.secondary)
                         if device.recoveryPending {
-                            Button("Ripristina modalità originale") { device.recoverOriginalMode() }
+                            Button("Restore Original Mode") { device.recoverOriginalMode() }
                                 .disabled(device.isBusy)
-                            Text("Usa lo stesso ricevitore nella porta USB originale. Il ripristino non avviene automaticamente dopo una chiusura imprevista.")
+                            Text("Use the same receiver in its original USB port. Restoring does not happen automatically after an unexpected quit.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -118,47 +118,47 @@ struct StatusPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack {
-                    Text("Permessi e connessione").font(.title2.weight(.semibold))
+                    Text("Permissions and connection").font(.title2.weight(.semibold))
                     Spacer()
-                    Button("Ricontrolla") { model.refresh() }
+                    Button("Check Again") { model.refresh() }
                 }
-                Text("I permessi vengono ricontrollati automaticamente. Se macOS lo richiede, riapri l'app.")
+                Text("Permissions are checked again automatically. If macOS asks, reopen the app.")
                     .foregroundStyle(.secondary)
                 GroupBox {
                     VStack(spacing: 20) {
-                        permissionRow("Accessibilità", granted: permissions.hasAccessibilityPermission(),
-                                      detail: "Consente di inviare le azioni configurate.",
+                        permissionRow("Accessibility", granted: permissions.hasAccessibilityPermission(),
+                                      detail: "Allows sending the configured actions.",
                                       open: permissions.openAccessibilityPreferences)
                         Divider()
-                        permissionRow("Monitoraggio input", granted: permissions.hasInputMonitoringPermission(),
-                                      detail: "Consente di riconoscere e intercettare i pulsanti.",
+                        permissionRow("Input Monitoring", granted: permissions.hasInputMonitoringPermission(),
+                                      detail: "Allows recognizing and intercepting the buttons.",
                                       open: permissions.openInputMonitoringPreferences)
                     }.padding(12)
                 }
                 GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
-                        statusRow("Dispositivo", model.deviceName)
-                        statusRow("Trasporto", HIDListener.shared.transport ?? "Non disponibile")
-                        statusRow("Batteria", RazerDeviceController.shared.batteryLevel.map { "\($0)%" } ?? "Non disponibile")
+                        statusRow("Device", model.deviceName)
+                        statusRow("Transport", HIDListener.shared.transport ?? "Unavailable")
+                        statusRow("Battery", RazerDeviceController.shared.batteryLevel.map { "\($0)%" } ?? "Unavailable")
                         Divider()
-                        statusRow("Intercettazione input", EventTapManager.shared.isRunning ? "In esecuzione" : "Non disponibile")
-                        statusRow("Rimappatura", model.remappingActive ? "Attiva" : "Non attiva")
-                        statusRow("Ultimo input", HIDListener.shared.lastInputDescription)
+                        statusRow("Input interception", EventTapManager.shared.isRunning ? "Running" : "Unavailable")
+                        statusRow("Remapping", model.remappingActive ? "On" : "Off")
+                        statusRow("Last input", HIDListener.shared.lastInputDescription)
                     }.padding(12)
                 }
                 GroupBox {
                     HStack(alignment: .top, spacing: 14) {
                         Image(systemName: "menubar.rectangle").font(.title2).foregroundStyle(UIStyle.accent)
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Attiva anche in background").font(.headline)
-                            Text("Chiudi la finestra per lasciare NagaController nella barra dei menu. Le assegnazioni continuano a funzionare nelle altre app. Per interrompere il servizio, disattiva Rimappatura oppure scegli Esci.")
+                            Text("Keeps running in the background").font(.headline)
+                            Text("Close the window to keep OpenNaga in the menu bar. Your assignments keep working in other apps. To stop the service, turn off Remapping or choose Quit.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
                     }.padding(12)
                 }
                 Text(RazerDeviceController.shared.statusMessage).font(.callout).foregroundStyle(.secondary)
-                Text("I tasti principali sinistro e destro mantengono la funzione originale finché non assegni un'azione.")
+                Text("The left and right main buttons keep their original function until you assign an action.")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(24)
         }
@@ -173,15 +173,15 @@ struct StatusPane: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(granted ? "Concesso" : "Da concedere").foregroundStyle(.secondary)
-            Button("Apri impostazioni", action: open)
+            Text(granted ? "Granted" : "Not granted").foregroundStyle(.secondary)
+            Button("Open Settings", action: open)
         }
     }
 
     private func statusRow(_ title: String, _ value: String) -> some View {
         HStack(alignment: .top) {
             Text(title).foregroundStyle(.secondary).frame(width: 160, alignment: .leading)
-            Text(value.isEmpty ? "Nessun dato" : value).textSelection(.enabled)
+            Text(value.isEmpty ? "No data" : value).textSelection(.enabled)
             Spacer()
         }
     }
@@ -195,37 +195,37 @@ struct ProfileManagerPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Gestisci profili").font(.title2.weight(.semibold))
-            Picker("Profilo corrente", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
+            Text("Manage profiles").font(.title2.weight(.semibold))
+            Picker("Current profile", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
             }
-            TextField("Nome del profilo", text: $name).textFieldStyle(.roundedBorder)
+            TextField("Profile name", text: $name).textFieldStyle(.roundedBorder)
             HStack {
-                Button("Crea vuoto") { perform { ConfigManager.shared.createProfile(name: name) } }
-                Button("Duplica corrente") { perform { ConfigManager.shared.duplicateProfile(source: model.profile, as: name) } }
-                Button("Rinomina") { perform { ConfigManager.shared.renameProfile(from: model.profile, to: name) } }
+                Button("Create Empty") { perform { ConfigManager.shared.createProfile(name: name) } }
+                Button("Duplicate Current") { perform { ConfigManager.shared.duplicateProfile(source: model.profile, as: name) } }
+                Button("Rename") { perform { ConfigManager.shared.renameProfile(from: model.profile, to: name) } }
             }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Divider()
             HStack {
-                Button("Elimina profilo…") {
+                Button("Delete Profile…") {
                     let alert = NSAlert()
-                    alert.messageText = "Eliminare \(model.profile)?"
-                    alert.informativeText = "Le assegnazioni di questo profilo verranno eliminate."
-                    alert.addButton(withTitle: "Elimina")
-                    alert.addButton(withTitle: "Annulla")
+                    alert.messageText = "Delete \(model.profile)?"
+                    alert.informativeText = "This profile's assignments will be deleted."
+                    alert.addButton(withTitle: "Delete")
+                    alert.addButton(withTitle: "Cancel")
                     if alert.runModal() == .alertFirstButtonReturn {
                         perform { ConfigManager.shared.deleteProfile(named: model.profile) }
                     }
                 }.disabled(model.profiles.count <= 1)
                 Spacer()
-                Button("Fine") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
             if let message = error ?? model.error { Text(message).foregroundStyle(.red).font(.callout) }
         }.padding(24).frame(width: 520)
     }
 
     private func perform(_ action: () -> Bool) {
-        guard action() else { error = "Operazione non riuscita. Scegli un nome diverso e non vuoto."; return }
+        guard action() else { error = "The operation failed. Choose a different, non-empty name."; return }
         name = ""
         error = nil
         model.refresh()

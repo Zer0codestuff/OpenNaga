@@ -2,12 +2,12 @@
 
 ## Reporting a Vulnerability
 
-NagaController requires sensitive system permissions (Accessibility and Input Monitoring), so security is taken seriously.
+OpenNaga requires sensitive system permissions (Accessibility and Input Monitoring), so security is taken seriously.
 
 If you discover a security vulnerability, please report it by:
 
 1. **Opening a private security advisory** on GitHub (preferred)
-   - Go to the [Security tab](https://github.com/DParent10/NagaController/security/advisories/new)
+   - Go to the [Security tab](https://github.com/Zer0codestuff/OpenNaga/security/advisories/new)
    - Click "Report a vulnerability"
 
 Please include:
@@ -34,4 +34,4 @@ Security issues include:
 - Bypass of macOS security features
 - Code injection vulnerabilities
 
-Thank you for helping keep NagaController secure!
+Thank you for helping keep OpenNaga secure!

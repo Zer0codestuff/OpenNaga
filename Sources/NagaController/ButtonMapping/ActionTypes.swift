@@ -20,17 +20,17 @@ enum MouseAction: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .browserBack: return "Indietro nel browser"
-        case .browserForward: return "Avanti nel browser"
-        case .leftClick: return "Clic sinistro"
-        case .rightClick: return "Clic destro"
-        case .middleClick: return "Clic centrale"
-        case .button4: return "Pulsante mouse 4"
-        case .button5: return "Pulsante mouse 5"
-        case .scrollUp: return "Scorri su"
-        case .scrollDown: return "Scorri giù"
-        case .scrollLeft: return "Scorri a sinistra"
-        case .scrollRight: return "Scorri a destra"
+        case .browserBack: return "Browser back"
+        case .browserForward: return "Browser forward"
+        case .leftClick: return "Left click"
+        case .rightClick: return "Right click"
+        case .middleClick: return "Middle click"
+        case .button4: return "Mouse button 4"
+        case .button5: return "Mouse button 5"
+        case .scrollUp: return "Scroll up"
+        case .scrollDown: return "Scroll down"
+        case .scrollLeft: return "Scroll left"
+        case .scrollRight: return "Scroll right"
         }
     }
 
@@ -62,14 +62,14 @@ extension ActionType {
         switch self {
         case .audio(let action, let description): return description ?? action.title
         case .system(let action, let description): return description ?? action.title
-        case .disabled: return "Disabilitato"
+        case .disabled: return "Disabled"
         case .mouse(let action, let description): return description ?? action.title
         case .keySequence(let keys, let description): return description ?? keys.map { $0.formattedShortcut() }.joined(separator: ", ")
         case .application(let path, let description): return description ?? URL(fileURLWithPath: path).lastPathComponent
-        case .systemCommand(_, let description): return description ?? "Comando shell"
-        case .textSnippet(_, let description): return description ?? "Testo"
+        case .systemCommand(_, let description): return description ?? "Shell command"
+        case .textSnippet(_, let description): return description ?? "Text"
         case .macro(_, let description): return description ?? "Macro"
-        case .profileSwitch(let profile, let description): return description ?? "Profilo: \(profile)"
+        case .profileSwitch(let profile, let description): return description ?? "Profile: \(profile)"
         }
     }
 }
@@ -271,9 +271,9 @@ extension KeyStroke {
     }()
 
     private static let specialKeyNames: [UInt16: String] = [
-        UInt16(kVK_Return): "Invio",
+        UInt16(kVK_Return): "Return",
         UInt16(kVK_ANSI_KeypadEnter): "Enter",
-        UInt16(kVK_Space): "Spazio",
+        UInt16(kVK_Space): "Space",
         UInt16(kVK_Delete): "⌫",
         UInt16(kVK_ForwardDelete): "⌦",
         UInt16(kVK_Escape): "Esc",
@@ -282,8 +282,8 @@ extension KeyStroke {
         UInt16(kVK_Help): "Help",
         UInt16(kVK_Home): "Home",
         UInt16(kVK_End): "End",
-        UInt16(kVK_PageUp): "Pag ↑",
-        UInt16(kVK_PageDown): "Pag ↓",
+        UInt16(kVK_PageUp): "Page ↑",
+        UInt16(kVK_PageDown): "Page ↓",
         UInt16(kVK_LeftArrow): "←",
         UInt16(kVK_RightArrow): "→",
         UInt16(kVK_UpArrow): "↑",

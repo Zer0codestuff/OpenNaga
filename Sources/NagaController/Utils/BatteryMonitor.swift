@@ -62,7 +62,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             let connected = central.retrieveConnectedPeripherals(withServices: [batteryService])
             if !connected.isEmpty {
                 let preferred = connected.first { ($0.name ?? "").lowercased().contains("razer") || ($0.name ?? "").lowercased().contains("naga") } ?? connected.first!
-                NSLog("[BLE] Found connected peripheral with Battery Service: \(preferred.name ?? "<unnamed>") — using it")
+                NSLog("[BLE] Found connected peripheral with Battery Service: \(preferred.name ?? "<unnamed>"), using it")
                 target = preferred
                 target?.delegate = self
                 // Always request a (re)connect to ensure callbacks flow through this central
@@ -133,7 +133,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             target = nil
             batteryCharacteristic = nil
             batteryLevel = nil
-            NSLog("[BLE] Disconnected: \(error?.localizedDescription ?? "<no error>") — restarting scan")
+            NSLog("[BLE] Disconnected: \(error?.localizedDescription ?? "<no error>"), restarting scan")
             cancelRetry()
             startScan()
         }
@@ -149,11 +149,11 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             NSLog("[BLE] Discovered services: \(services.map{ $0.uuid.uuidString }.joined(separator: ", "))")
         }
         if let service = peripheral.services?.first(where: { $0.uuid == batteryServiceUUID }) {
-            NSLog("[BLE] Battery service found — discovering characteristics (0x2A19)")
+            NSLog("[BLE] Battery service found; discovering characteristics (0x2A19)")
             peripheral.discoverCharacteristics([batteryLevelUUID], for: service)
         } else {
             NSLog("[BLE] Battery service (0x180F) not found on this peripheral")
-            // Not our target — disconnect and resume scanning
+            // Not our target; disconnect and resume scanning
             if peripheral == target {
                 target = nil
             }
@@ -185,7 +185,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
             }
             cancelRetry()
         } else {
-            NSLog("[BLE] Battery Level characteristic (0x2A19) not found — trying to discover all characteristics")
+            NSLog("[BLE] Battery Level characteristic (0x2A19) not found; trying to discover all characteristics")
             peripheral.discoverCharacteristics(nil, for: service)
             scheduleDiscoveryRetry(for: peripheral)
         }
@@ -207,7 +207,7 @@ final class BatteryMonitor: NSObject, CBCentralManagerDelegate, CBPeripheralDele
         let item = DispatchWorkItem { [weak self, weak peripheral] in
             guard let self = self, let p = peripheral else { return }
             if self.batteryLevel == nil && self.batteryCharacteristic == nil {
-                NSLog("[BLE] Discovery timeout — retrying service discovery or reconnect")
+                NSLog("[BLE] Discovery timeout; retrying service discovery or reconnect")
                 let batteryService = CBUUID(string: "180F")
                 if p.state == .connected {
                     p.discoverServices([batteryService])

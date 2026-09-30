@@ -12,7 +12,7 @@ final class RazerDeviceController {
     private(set) var batteryLevel: Int?
     private(set) var driverModeEnabled = false
     private(set) var recoveryPending = false
-    private(set) var statusMessage = "Collegare il ricevitore USB e premere Aggiorna."
+    private(set) var statusMessage = "Connect the USB receiver and press Refresh."
 
     private let queue = DispatchQueue(label: "NagaController.hardware", qos: .userInitiated)
     private let worker = Worker()
@@ -43,7 +43,7 @@ final class RazerDeviceController {
         // operation allowed behind an in-flight request.
         guard !isBusy || completion != nil else { return }
         isBusy = true
-        statusMessage = "Comunicazione con il mouse…"
+        statusMessage = "Talking to the mouse…"
         notify()
         let worker = worker
         queue.async { [weak self] in
@@ -86,7 +86,7 @@ final class RazerDeviceController {
         fileprivate func perform(_ operation: Operation) -> Outcome {
             // Shutdown without an outstanding mode change requires no USB I/O.
             if case .restore = operation, !modeChangedThisSession {
-                return Outcome(connected: false, snapshot: nil, message: "Nessuna modalità da ripristinare.",
+                return Outcome(connected: false, snapshot: nil, message: "No mode to restore.",
                                recoveryPending: FileManager.default.fileExists(atPath: journalURL.path))
             }
             let transport = MacRazerUSBTransport()
@@ -110,10 +110,10 @@ final class RazerDeviceController {
                         if FileManager.default.fileExists(atPath: journalURL.path) {
                             let saved = try readRecovery()
                             guard saved.identity == transport.identity else {
-                                throw RazerHardwareError.transport("Ripristino pendente per un altro ricevitore. Nessuna modalità modificata.")
+                                throw RazerHardwareError.transport("A restore is pending for another receiver. No mode was changed.")
                             }
                             guard modeChangedThisSession else {
-                                throw RazerHardwareError.transport("Ripristinare esplicitamente la modalità della sessione precedente prima di modificarla.")
+                                throw RazerHardwareError.transport("Explicitly restore the previous session's mode before changing it.")
                             }
                         } else {
                             // Atomic journal write must succeed BEFORE mode SET.
@@ -129,7 +129,7 @@ final class RazerDeviceController {
                 case .restore, .recover:
                     let saved = try readRecovery()
                     guard saved.identity == transport.identity else {
-                        throw RazerHardwareError.transport("Ricollegare il ricevitore alla porta USB originale per ripristinare la modalità.")
+                        throw RazerHardwareError.transport("Reconnect the receiver to its original USB port to restore the mode.")
                     }
                     if try session.readMode() != saved.originalMode { try session.setMode(saved.originalMode) }
                     try FileManager.default.removeItem(at: journalURL)
@@ -139,9 +139,9 @@ final class RazerDeviceController {
                 let recoveryPending = FileManager.default.fileExists(atPath: journalURL.path)
                 let message = recoveryPending
                         ? (modeChangedThisSession
-                            ? "Valori letti. La modalità originale verrà ripristinata all'uscita."
-                            : "Ripristino pendente da una sessione precedente. Usare Ripristina modalità.")
-                        : "Valori hardware letti tramite USB."
+                            ? "Values read. The original mode will be restored when you quit."
+                            : "A restore is pending from a previous session. Use Restore Original Mode.")
+                        : "Hardware values read over USB."
                 return Outcome(connected: true, snapshot: snapshot,
                                message: ([message] + snapshot.warnings).joined(separator: "\n"),
                                recoveryPending: recoveryPending)
@@ -153,7 +153,7 @@ final class RazerDeviceController {
         private func readRecovery() throws -> Recovery {
             let saved = try JSONDecoder().decode(Recovery.self, from: Data(contentsOf: journalURL))
             guard saved.originalMode == 0 || saved.originalMode == 3 else {
-                throw RazerHardwareError.invalidValue("Record di ripristino non valido.")
+                throw RazerHardwareError.invalidValue("Invalid restore record.")
             }
             return saved
         }

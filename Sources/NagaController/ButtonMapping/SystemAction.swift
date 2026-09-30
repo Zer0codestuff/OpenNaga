@@ -4,11 +4,11 @@ import IOKit.hidsystem
 
 enum SystemActionGroup: String, CaseIterable {
     case audio = "Audio"
-    case playback = "Riproduzione"
-    case brightness = "Luminosità"
-    case screenshots = "Screenshot"
-    case windows = "Finestre e spazi"
-    case tools = "Strumenti"
+    case playback = "Playback"
+    case brightness = "Brightness"
+    case screenshots = "Screenshots"
+    case windows = "Windows and Spaces"
+    case tools = "Tools"
 
     var actions: [SystemAction] { SystemAction.allCases.filter { $0.group == self } }
 }
@@ -46,31 +46,31 @@ enum SystemAction: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .volumeUp: return "Aumenta volume"
-        case .volumeDown: return "Diminuisci volume"
-        case .mute: return "Attiva/disattiva audio"
-        case .playPause: return "Riproduci/pausa"
-        case .previousTrack: return "Traccia precedente"
-        case .nextTrack: return "Traccia successiva"
-        case .brightnessUp: return "Aumenta luminosità"
-        case .brightnessDown: return "Diminuisci luminosità"
-        case .screenshot: return "Cattura schermo intero"
-        case .screenshotSelection: return "Cattura selezione"
-        case .screenshotOptions: return "Opzioni screenshot e registrazione"
-        case .screenshotClipboard: return "Schermo intero negli appunti"
-        case .screenshotSelectionClipboard: return "Selezione negli appunti"
+        case .volumeUp: return "Volume up"
+        case .volumeDown: return "Volume down"
+        case .mute: return "Mute/unmute"
+        case .playPause: return "Play/pause"
+        case .previousTrack: return "Previous track"
+        case .nextTrack: return "Next track"
+        case .brightnessUp: return "Brightness up"
+        case .brightnessDown: return "Brightness down"
+        case .screenshot: return "Capture entire screen"
+        case .screenshotSelection: return "Capture selection"
+        case .screenshotOptions: return "Screenshot and recording options"
+        case .screenshotClipboard: return "Entire screen to clipboard"
+        case .screenshotSelectionClipboard: return "Selection to clipboard"
         case .missionControl: return "Mission Control"
-        case .applicationWindows: return "Mostra finestre dell'app"
-        case .showDesktop: return "Mostra Scrivania"
-        case .previousSpace: return "Spazio a sinistra"
-        case .nextSpace: return "Spazio a destra"
-        case .hideApplication: return "Nascondi app corrente"
-        case .switchApplication: return "Cambia applicazione"
-        case .spotlight: return "Apri Spotlight"
-        case .finder: return "Apri Finder"
-        case .systemSettings: return "Apri Impostazioni di Sistema"
-        case .notificationCenter: return "Mostra Centro Notifiche"
-        case .doNotDisturb: return "Attiva/disattiva Non disturbare"
+        case .applicationWindows: return "Show application windows"
+        case .showDesktop: return "Show Desktop"
+        case .previousSpace: return "Move left a space"
+        case .nextSpace: return "Move right a space"
+        case .hideApplication: return "Hide current app"
+        case .switchApplication: return "Switch to last app"
+        case .spotlight: return "Open Spotlight"
+        case .finder: return "Open Finder"
+        case .systemSettings: return "Open System Settings"
+        case .notificationCenter: return "Show Notification Center"
+        case .doNotDisturb: return "Toggle Do Not Disturb"
         }
     }
 
@@ -106,25 +106,25 @@ enum SystemAction: String, Codable, CaseIterable {
     var help: String {
         switch self {
         case .brightnessUp, .brightnessDown:
-            return "Come i tasti luminosità del Mac. I monitor esterni devono supportare il controllo da macOS."
+            return "Works like the Mac brightness keys. External displays must support brightness control from macOS."
         case .playPause, .previousTrack, .nextTrack:
-            return "Controlla la riproduzione multimediale attiva, come i tasti del Mac."
+            return "Controls the active media playback, like the Mac media keys."
         case .screenshot, .screenshotSelection:
-            return "Salva nella destinazione scelta nelle opzioni Screenshot di macOS."
+            return "Saves to the location chosen in the macOS Screenshot options."
         case .screenshotOptions:
-            return "Apre gli strumenti di macOS per catturare lo schermo, una finestra o registrare un video."
+            return "Opens the macOS tools to capture the screen or a window, or to record a video."
         case .screenshotClipboard, .screenshotSelectionClipboard:
-            return "Copia la cattura negli appunti al posto di salvarla come file."
+            return "Copies the capture to the clipboard instead of saving it as a file."
         case .previousSpace, .nextSpace:
-            return "Passa allo spazio adiacente, se presente."
+            return "Moves to the adjacent space, if there is one."
         case .switchApplication:
-            return "Passa all'ultima app utilizzata, come un tocco su Command-Tab."
+            return "Switches to the last used app, like a quick Command-Tab."
         case .hideApplication:
-            return "Nasconde l'app in primo piano senza chiuderla."
+            return "Hides the frontmost app without quitting it."
         case .doNotDisturb:
-            return "Usa la scorciatoia Non disturbare configurata in macOS. Le impostazioni di full immersion possono sincronizzarsi con gli altri dispositivi."
+            return "Uses the Do Not Disturb shortcut configured in macOS. Focus settings can sync to your other devices."
         default:
-            return "Una sola azione a ogni pressione. Tenere premuto il pulsante non la ripete."
+            return "One action per press. Holding the button does not repeat it."
         }
     }
 
@@ -183,7 +183,7 @@ enum SystemAction: String, Codable, CaseIterable {
     var needsAccessibility: Bool { mediaKey != nil || shortcut != nil }
 
     var shortcutSetupMessage: String {
-        let section = group == .screenshots ? "Screenshot" : "Mission Control"
-        return "Assegna e abilita la scorciatoia in Tastiera > Abbreviazioni da tastiera > \(section)."
+        let section = group == .screenshots ? "Screenshots" : "Mission Control"
+        return "Assign and enable the shortcut in Keyboard > Keyboard Shortcuts > \(section)."
     }
 }

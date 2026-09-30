@@ -2,15 +2,15 @@ import Cocoa
 import SwiftUI
 
 private enum EditorKind: String, CaseIterable {
-    case original = "Funzione originale"
-    case mouse = "Azione mouse"
-    case keys = "Tasti"
-    case system = "Sistema"
-    case application = "Applicazione"
-    case profile = "Cambia profilo"
-    case shell = "Comando shell"
+    case original = "Original function"
+    case mouse = "Mouse action"
+    case keys = "Keys"
+    case system = "System"
+    case application = "Application"
+    case profile = "Switch profile"
+    case shell = "Shell command"
     case macro = "Macro"
-    case disabled = "Disabilitato"
+    case disabled = "Disabled"
 }
 
 struct ActionInspector: View {
@@ -42,23 +42,23 @@ struct ActionInspector: View {
             }
             HStack(spacing: 5) {
                 Image(systemName: "checkmark.circle")
-                Text(model.mapping[button]?.displayName ?? "Funzione originale")
+                Text(model.mapping[button]?.displayName ?? "Original function")
                     .lineLimit(2)
             }.font(.callout).foregroundStyle(.secondary)
             if button >= 18 {
-                Label("Mantieni un clic principale disponibile per usare il Mac.", systemImage: "exclamationmark.triangle")
+                Label("Keep a primary click available so you can still use the Mac.", systemImage: "exclamationmark.triangle")
                     .font(.callout).foregroundStyle(.orange)
             }
-            Picker("Azione", selection: Binding(get: { kind }, set: changeKind)) {
+            Picker("Action", selection: Binding(get: { kind }, set: changeKind)) {
                 ForEach(EditorKind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             Divider()
             editor
             if kind != .original && kind != .disabled {
-                DisclosureGroup("Nome personalizzato") {
-                    TextField("Nome facoltativo", text: $description)
+                DisclosureGroup("Custom name") {
+                    TextField("Optional name", text: $description)
                         .onSubmit { persist() }.padding(.top, 8)
-                    Text("Premi Invio per salvare il nome.").font(.caption).foregroundStyle(.secondary)
+                    Text("Press Return to save the name.").font(.caption).foregroundStyle(.secondary)
                 }.font(.callout)
             }
             if let validationError {
@@ -81,57 +81,57 @@ struct ActionInspector: View {
     @ViewBuilder private var editor: some View {
         switch kind {
         case .original:
-            Label("Nessuna rimappatura", systemImage: "arrow.uturn.backward")
-            Text("Il pulsante mantiene la sua funzione. Scegli Tasti per assegnare un tasto della tastiera.")
+            Label("No remapping", systemImage: "arrow.uturn.backward")
+            Text("The button keeps its default function. Choose Keys to assign a keyboard key.")
                 .foregroundStyle(.secondary)
         case .disabled:
-            Label("Pulsante disabilitato", systemImage: "nosign")
-            Text("Il segnale viene bloccato solo quando la rimappatura è attiva.")
+            Label("Button disabled", systemImage: "nosign")
+            Text("The signal is blocked only while remapping is on.")
                 .foregroundStyle(.secondary)
         case .mouse:
             HStack {
-                Button("Indietro") { mouse = .browserBack; persist() }
-                Button("Avanti") { mouse = .browserForward; persist() }
+                Button("Back") { mouse = .browserBack; persist() }
+                Button("Forward") { mouse = .browserForward; persist() }
             }
-            Text("Consigliati per navigare nel browser.").font(.caption).foregroundStyle(.secondary)
-            Picker("Funzione", selection: Binding(get: { mouse }, set: { mouse = $0; persist() })) {
+            Text("Recommended for browser navigation.").font(.caption).foregroundStyle(.secondary)
+            Picker("Function", selection: Binding(get: { mouse }, set: { mouse = $0; persist() })) {
                 ForEach(MouseAction.allCases, id: \.rawValue) { Text($0.title).tag($0) }
             }
-            Text("I pulsanti mouse 4 e 5 inviano clic reali. Nei browser, che su macOS li ignorano, vengono convertiti automaticamente in Indietro e Avanti.")
+            Text("Mouse buttons 4 and 5 send real clicks. Browsers on macOS ignore them, so there they are converted to Back and Forward automatically.")
                 .font(.callout).foregroundStyle(.secondary)
         case .system:
             systemEditor
         case .keys:
             shortcutEditor
         case .application:
-            TextField("Percorso dell'applicazione", text: $text).onSubmit { persist() }
-            Button("Scegli applicazione…") {
+            TextField("Application path", text: $text).onSubmit { persist() }
+            Button("Choose Application…") {
                 let panel = NSOpenPanel()
                 panel.allowedContentTypes = [.applicationBundle]
                 panel.canChooseDirectories = false
                 if panel.runModal() == .OK, let url = panel.url { text = url.path; persist() }
             }
         case .profile:
-            Picker("Profilo destinazione", selection: Binding(get: { text }, set: { text = $0; if !text.isEmpty { persist() } })) {
-                Text("Scegli un profilo").tag("")
+            Picker("Target profile", selection: Binding(get: { text }, set: { text = $0; if !text.isEmpty { persist() } })) {
+                Text("Choose a profile").tag("")
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
             }
         case .shell:
-            Text("Il comando verrà eseguito alla pressione del pulsante. Usa solo comandi che conosci.")
+            Text("The command runs when you press the button. Only use commands you trust.")
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $text).font(.system(.body, design: .monospaced)).frame(minHeight: 100)
-            Button("Applica comando") { persist() }
+            Button("Apply Command") { persist() }
         case .macro:
-            Text("Passaggi JSON. La macro esistente resta invariata finché non applichi una versione valida.")
+            Text("JSON steps. The existing macro stays unchanged until you apply a valid version.")
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $text).font(.system(.body, design: .monospaced)).frame(minHeight: 230)
-            Button("Applica macro") { persist() }
+            Button("Apply Macro") { persist() }
         }
     }
 
     private var systemEditor: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Categoria", selection: Binding(get: { system.group }, set: { group in
+            Picker("Category", selection: Binding(get: { system.group }, set: { group in
                 guard let action = group.actions.first else { return }
                 system = action
                 persist()
@@ -139,8 +139,8 @@ struct ActionInspector: View {
                 ForEach(SystemActionGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("Funzione").font(.caption).foregroundStyle(.secondary)
-                Picker("Funzione", selection: Binding(get: { system }, set: { system = $0; persist() })) {
+                Text("Function").font(.caption).foregroundStyle(.secondary)
+                Picker("Function", selection: Binding(get: { system }, set: { system = $0; persist() })) {
                     ForEach(system.group.actions, id: \.self) { action in
                         Label(action.title, systemImage: action.symbol).tag(action)
                     }
@@ -149,18 +149,18 @@ struct ActionInspector: View {
             Text(system.help).font(.callout).foregroundStyle(.secondary)
             if let shortcut = system.shortcut {
                 if let stroke = shortcut.resolve(in: systemShortcuts) {
-                    Text("Scorciatoia macOS: \(stroke.displayName)")
+                    Text("macOS shortcut: \(stroke.displayName)")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Label(system.shortcutSetupMessage, systemImage: "exclamationmark.triangle")
                         .font(.callout).foregroundStyle(.orange)
-                    Button("Configura scorciatoia…") { MacSystemShortcut.openSettings() }
+                    Button("Set Up Shortcut…") { MacSystemShortcut.openSettings() }
                 }
             }
             Button { validationError = ButtonMapper.shared.performSystem(system) } label: {
-                Label("Prova", systemImage: "play.fill")
+                Label("Test", systemImage: "play.fill")
             }
-            .help("Esegui ora la funzione di sistema selezionata")
+            .help("Run the selected system function now")
             .disabled((system.needsAccessibility && !model.permissionsGranted) ||
                       (system.shortcut != nil && system.shortcut?.resolve(in: systemShortcuts) == nil))
         }
@@ -169,22 +169,22 @@ struct ActionInspector: View {
     private var shortcutEditor: some View {
         VStack(alignment: .leading, spacing: 16) {
             if legacyText != nil {
-                Text("Il testo precedente resta salvato finché non scegli un tasto.")
+                Text("The previous text stays saved until you choose a key.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if keys.count > 1 {
-                Picker("Passaggio", selection: $selectedStroke) {
+                Picker("Step", selection: $selectedStroke) {
                     ForEach(keys.indices, id: \.self) { index in
                         Text("\(index + 1). \(keys[index].formattedShortcut())").tag(index)
                     }
                 }
             }
             VStack(spacing: 6) {
-                Text(currentStroke?.formattedShortcut() ?? "Scegli un tasto")
+                Text(currentStroke?.formattedShortcut() ?? "Choose a key")
                     .font(.system(size: currentStroke == nil ? 17 : 28, weight: .medium))
                     .foregroundStyle(currentStroke == nil ? Color.secondary : .primary)
                 if keys.count <= 1 {
-                    Text("Tenuto premuto finché premi il mouse")
+                    Text("Held down while you press the mouse button")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity).frame(height: 84)
@@ -193,7 +193,7 @@ struct ActionInspector: View {
                 replaceStroke(key.stroke(modifiers: currentStroke?.modifiers ?? []))
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("Combina con").font(.caption).foregroundStyle(.secondary)
+                Text("Combine with").font(.caption).foregroundStyle(.secondary)
                 HStack(spacing: 6) {
                     ForEach(["ctrl", "alt", "shift", "cmd"], id: \.self) { modifier in
                         Toggle(modifierSymbol(modifier), isOn: Binding(
@@ -205,27 +205,27 @@ struct ActionInspector: View {
                                 persist()
                             }
                         )).toggleStyle(.button).frame(maxWidth: .infinity)
-                            .help(["ctrl": "Control", "alt": "Option", "shift": "Maiuscole", "cmd": "Command"][modifier] ?? modifier)
+                            .help(["ctrl": "Control", "alt": "Option", "shift": "Shift", "cmd": "Command"][modifier] ?? modifier)
                             .disabled(currentStroke == nil)
                     }
                 }
             }
             Divider()
             ShortcutCapture(isRecording: $recording) { replaceStroke($0) }.frame(height: 28)
-            Text(recording ? "Premi il tasto o la combinazione. Esc viene assegnato come tasto." : "Puoi anche premere il tasto sulla tastiera con Registra tasto.")
+            Text(recording ? "Press a key or combination. Esc is assigned as a key." : "You can also press the key on your keyboard with Record Key.")
                 .font(.caption).foregroundStyle(.secondary)
-            DisclosureGroup("Sequenza di tasti") {
+            DisclosureGroup("Key sequence") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Più passaggi vengono eseguiti in ordine alla pressione.")
+                    Text("Multiple steps run in order when you press the button.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        Button("Aggiungi passaggio") {
+                        Button("Add Step") {
                             keys.append(KeyStroke(key: "tab", modifiers: [], keyCode: 48))
                             selectedStroke = keys.count - 1
                             persist()
                         }
                         if keys.count > 1 {
-                            Button("Rimuovi") {
+                            Button("Remove") {
                                 keys.remove(at: selectedStroke)
                                 selectedStroke = max(0, selectedStroke - 1)
                                 persist()
@@ -252,10 +252,10 @@ struct ActionInspector: View {
         guard newKind != kind else { return }
         if kind == .macro || keys.count > 1 {
             let alert = NSAlert()
-            alert.messageText = "Sostituire l'azione esistente?"
-            alert.informativeText = "La macro o sequenza verrà sostituita nel profilo corrente."
-            alert.addButton(withTitle: "Sostituisci")
-            alert.addButton(withTitle: "Annulla")
+            alert.messageText = "Replace the existing action?"
+            alert.informativeText = "The macro or sequence will be replaced in the current profile."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         recording = false
@@ -317,11 +317,11 @@ struct ActionInspector: View {
                     ($0.type != "key" || $0.keyStroke != nil) &&
                     ($0.type != "text" || $0.text != nil) &&
                     ($0.type != "delay" || ($0.delayMs ?? -1) >= 0) }) else {
-                    validationError = "Passaggi non validi: usa key, text o delay con il relativo valore."
+                    validationError = "Invalid steps: use key, text or delay with its value."
                     return
                 }
                 action = .macro(steps: steps, description: label)
-            } catch { validationError = "JSON non valido: \(error.localizedDescription)"; return }
+            } catch { validationError = "Invalid JSON: \(error.localizedDescription)"; return }
         }
         model.save(action, button: button)
     }
@@ -355,7 +355,7 @@ private final class CaptureButton: NSButton {
     init() {
         super.init(frame: .zero)
         bezelStyle = .rounded
-        title = "Registra tasto"
+        title = "Record Key"
         target = self
         action = #selector(toggleRecording)
         resignation = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] note in
@@ -369,7 +369,7 @@ private final class CaptureButton: NSButton {
     func setRecording(_ value: Bool) {
         guard value != recording else { return }
         recording = value
-        title = value ? "Annulla registrazione" : "Registra tasto"
+        title = value ? "Cancel Recording" : "Record Key"
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         guard value else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in

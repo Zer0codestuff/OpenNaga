@@ -12,7 +12,7 @@ final class HIDListener {
     ]
     private(set) var connectedDeviceName: String?
     private(set) var transport: String?
-    private(set) var lastInputDescription = "Nessun input rilevato. I tasti DPI richiedono un report driver riconosciuto."
+    private(set) var lastInputDescription = "No input detected. The DPI buttons require a recognized driver report."
     private let lock = NSLock()
     private var matcher = InputEdgeMatcher()
     private var runLoop: CFRunLoop?
@@ -63,7 +63,7 @@ final class HIDListener {
             if result == kIOReturnSuccess && shouldRun { CFRunLoopRun() }
             else if result != kIOReturnSuccess {
                 DispatchQueue.main.async { self.desiredRunning = false }
-                publish { self.lastInputDescription = "Accesso HID non disponibile: \(result)" }
+                publish { self.lastInputDescription = "HID access unavailable: \(result)" }
             }
             IOHIDManagerUnscheduleFromRunLoop(manager, loop, CFRunLoopMode.defaultMode.rawValue)
             IOHIDManagerClose(manager, 0)
@@ -156,7 +156,7 @@ final class HIDListener {
         if !pan { if down { heldButtons.insert(button) } else { heldButtons.remove(button) } }
         lock.unlock()
         publishInput {
-            self.lastInputDescription = "Pulsante \(button): \(down ? "premuto" : "rilasciato")"
+            self.lastInputDescription = "Button \(button): \(down ? "pressed" : "released")"
             if down { NotificationCenter.default.post(name: Notification.Name("NagaButtonActivity"), object: self, userInfo: ["buttonIndex": button]) }
             // Release outputs even if the system key-up was not correlated in time.
             if !down && !(self.usesRawTiltDecoding && (15...16).contains(button)) {
@@ -203,7 +203,7 @@ final class HIDListener {
         publishInput {
             for button in changes.released { ButtonMapper.shared.handleRelease(buttonIndex: button) }
             for button in changes.pressed {
-                self.lastInputDescription = "Pulsante \(button): report driver riconosciuto"
+                self.lastInputDescription = "Button \(button): recognized driver report"
                 NotificationCenter.default.post(name: Notification.Name("NagaButtonActivity"), object: self, userInfo: ["buttonIndex": button])
                 if EventTapManager.shared.isRunning && EventTapManager.shared.isRemappingEnabled {
                     ButtonMapper.shared.handlePress(buttonIndex: button)

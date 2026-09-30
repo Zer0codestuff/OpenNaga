@@ -2,7 +2,8 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_BUNDLE="$PROJECT_ROOT/NagaController.app"
+# The SwiftPM product keeps its internal name; the shipped bundle is OpenNaga.
+APP_BUNDLE="$PROJECT_ROOT/OpenNaga.app"
 CONFIGURATION="${CONFIGURATION:-release}"
 DEV_IDENTITY="NagaController Dev"
 if [[ -z "${SIGNING_IDENTITY:-}" ]]; then
@@ -14,15 +15,15 @@ if [[ -z "${SIGNING_IDENTITY:-}" ]]; then
   fi
 fi
 
-printf 'Building NagaController (%s)...\n' "$CONFIGURATION"
+printf 'Building OpenNaga (%s)...\n' "$CONFIGURATION"
 swift build --package-path "$PROJECT_ROOT" -c "$CONFIGURATION" --product NagaController
 BIN_DIR="$(swift build --package-path "$PROJECT_ROOT" -c "$CONFIGURATION" --show-bin-path)"
 
 STAGING="$(mktemp -d "$PROJECT_ROOT/.build/app-stage.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
-STAGED_APP="$STAGING/NagaController.app"
+STAGED_APP="$STAGING/OpenNaga.app"
 mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
-cp "$BIN_DIR/NagaController" "$STAGED_APP/Contents/MacOS/NagaController"
+cp "$BIN_DIR/NagaController" "$STAGED_APP/Contents/MacOS/OpenNaga"
 cp -R "$PROJECT_ROOT/Resources/." "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$STAGED_APP/Contents/Info.plist"
 plutil -lint "$STAGED_APP/Contents/Info.plist"

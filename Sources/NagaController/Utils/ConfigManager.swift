@@ -76,7 +76,7 @@ final class ConfigManager {
                 // Overlay settings
                 if let s = upf.settings { mergedSettings = s }
             } catch {
-                lastError = "Impossibile caricare i profili: \(error.localizedDescription)"
+                lastError = "Unable to load profiles: \(error.localizedDescription)"
             }
         }
 
@@ -312,7 +312,7 @@ final class ConfigManager {
             try data.write(to: url, options: .atomic)
             lastError = nil
         } catch {
-            lastError = "Impossibile salvare i profili: \(error.localizedDescription)"
+            lastError = "Unable to save profiles: \(error.localizedDescription)"
         }
         notify()
     }

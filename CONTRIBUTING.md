@@ -1,19 +1,18 @@
-# Contributing to NagaController
+# Contributing to OpenNaga
 
-Thanks for your interest in contributing! 🎉
+Thanks for your interest in contributing.
 
 ## Ways to contribute
 
 ### Report bugs or request features
-Open an [issue](https://github.com/DParent10/NagaController/issues/new) with details about what you've experienced or what you'd like to see.
+Open an [issue](https://github.com/Zer0codestuff/OpenNaga/issues/new) with details about what you've experienced or what you'd like to see.
 
 ### Add support for your Razer mouse
 If you have a different Razer mouse model (Naga Trinity, Naga Pro, etc.) and want to help add support:
 
 1. Run the app from Terminal:
    ```bash
-   cd /Applications
-   ./NagaController.app/Contents/MacOS/NagaController
+   /Applications/OpenNaga.app/Contents/MacOS/OpenNaga
    ```
 
 2. Press your side buttons and copy the `[HID]` log output
@@ -29,13 +28,13 @@ I'll use this info to add support for your device!
 
 1. **Fork** the repository
 2. **Create a branch** for your changes
-3. **Test thoroughly** - especially if adding device support
+3. **Test thoroughly**, especially if adding device support
 4. **Submit a pull request** with a clear description of what changed and why
 
 #### Building from source
 ```bash
 bash Scripts/build_app.sh
-./NagaController.app/Contents/MacOS/NagaController
+./OpenNaga.app/Contents/MacOS/OpenNaga
 ```
 
 ## Code style

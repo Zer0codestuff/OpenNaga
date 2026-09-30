@@ -26,7 +26,7 @@ enum NagaDiagnostics {
             report["warnings"] = snapshot.warnings
             if verifyWrites {
                 guard let x = snapshot.dpiX, let y = snapshot.dpiY, let rate = snapshot.pollingRate else {
-                    throw RazerHardwareError.invalidValue("Leggere DPI e frequenza prima di verificarne la scrittura.")
+                    throw RazerHardwareError.invalidValue("Read DPI and polling rate before verifying writes.")
                 }
                 // Exercise both setters without changing the user's sensitivity.
                 try session.setDPI(x: x, y: y)

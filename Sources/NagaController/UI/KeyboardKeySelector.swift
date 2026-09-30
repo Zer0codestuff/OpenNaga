@@ -9,7 +9,7 @@ struct KeyboardKeySelector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Scegli un tasto", selection: $group) {
+            Picker("Choose a key", selection: $group) {
                 ForEach(KeyboardKeyGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: group == .navigation ? 4 : 6), spacing: 5) {
@@ -23,8 +23,8 @@ struct KeyboardKeySelector: View {
                             .clipShape(RoundedRectangle(cornerRadius: 5))
                             .overlay(RoundedRectangle(cornerRadius: 5).stroke(selectedCode == key.code ? UIStyle.accent.opacity(0.6) : UIStyle.separator))
                     }.buttonStyle(.plain)
-                        .help(key.group == .keypad ? "Tastierino: \(key.label)" : key.label)
-                        .accessibilityLabel(key.group == .keypad ? "Tastierino: \(key.label)" : key.label)
+                        .help(key.group == .keypad ? "Keypad: \(key.label)" : key.label)
+                        .accessibilityLabel(key.group == .keypad ? "Keypad: \(key.label)" : key.label)
                         .accessibilityAddTraits(selectedCode == key.code ? [.isSelected] : [])
                 }
             }

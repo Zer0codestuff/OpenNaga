@@ -8,7 +8,7 @@ final class MappingWindowController: NSWindowController, NSWindowDelegate {
         let vc = MappingViewController()
         let window = NSWindow(contentViewController: vc)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.title = "NagaController"
+        window.title = "OpenNaga"
         window.titleVisibility = .visible
         if #available(macOS 11.0, *) {
             window.toolbarStyle = .unified

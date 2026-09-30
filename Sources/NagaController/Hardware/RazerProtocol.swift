@@ -12,16 +12,16 @@ enum RazerHardwareError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidValue(let text), .malformed(let text), .transport(let text): return text
-        case .disconnected: return "Ricevitore Naga V2 HyperSpeed USB non disponibile."
+        case .disconnected: return "Naga V2 HyperSpeed USB receiver unavailable."
         case .status(let value):
             switch value {
-            case 1: return "Mouse occupato. Riprovare."
-            case 3: return "Il mouse ha rifiutato il comando."
-            case 4: return "Timeout del mouse. Muoverlo per riattivarlo."
-            case 5: return "Comando non supportato dal mouse."
-            default: return "Stato risposta sconosciuto: \(value)."
+            case 1: return "Mouse busy. Try again."
+            case 3: return "The mouse rejected the command."
+            case 4: return "Mouse timeout. Move it to wake it up."
+            case 5: return "Command not supported by the mouse."
+            default: return "Unknown response status: \(value)."
             }
-        case .readback: return "Il valore letto non conferma la modifica richiesta."
+        case .readback: return "The value read back does not confirm the requested change."
         }
     }
 }
@@ -42,7 +42,7 @@ struct RazerCommand: Equatable {
     static let getModeAlternate = RazerCommand(transaction: 0x1f, commandClass: 0, id: 0x84, arguments: [0, 0])
     static func setDPI(x: Int, y: Int) throws -> Self {
         guard (100...30000).contains(x), (100...30000).contains(y) else {
-            throw RazerHardwareError.invalidValue("DPI consentiti: 100...30000.")
+            throw RazerHardwareError.invalidValue("Allowed DPI: 100...30000.")
         }
         // The published SET builder uses storage=1 even when passed NOSTORE.
         return Self(transaction: 0x1f, commandClass: 4, id: 5,
@@ -50,12 +50,12 @@ struct RazerCommand: Equatable {
     }
     static func setPolling(_ hz: Int) throws -> Self {
         guard let value = [125: UInt8(8), 500: 2, 1000: 1][hz] else {
-            throw RazerHardwareError.invalidValue("Frequenze consentite: 125, 500 o 1000 Hz.")
+            throw RazerHardwareError.invalidValue("Allowed polling rates: 125, 500 or 1000 Hz.")
         }
         return Self(transaction: 0x1f, commandClass: 0, id: 5, arguments: [value])
     }
     static func setMode(_ mode: UInt8) throws -> Self {
-        guard mode == 0 || mode == 3 else { throw RazerHardwareError.invalidValue("Modalità hardware non sicura.") }
+        guard mode == 0 || mode == 3 else { throw RazerHardwareError.invalidValue("Unsafe hardware mode.") }
         return Self(transaction: 0x1f, commandClass: 0, id: 4, arguments: [mode, 0])
     }
 }
@@ -66,7 +66,7 @@ enum RazerReportCodec {
         bytes[2..<88].reduce(0, ^)
     }
     static func encode(_ command: RazerCommand) throws -> [UInt8] {
-        guard command.arguments.count <= 80 else { throw RazerHardwareError.invalidValue("Comando troppo lungo.") }
+        guard command.arguments.count <= 80 else { throw RazerHardwareError.invalidValue("Command too long.") }
         var bytes = [UInt8](repeating: 0, count: length)
         bytes[1] = command.transaction
         bytes[5] = UInt8(command.arguments.count)
@@ -77,15 +77,15 @@ enum RazerReportCodec {
         return bytes
     }
     static func decode(_ bytes: [UInt8], for command: RazerCommand) throws -> [UInt8] {
-        guard bytes.count == length else { throw RazerHardwareError.malformed("Risposta USB: attesi 90 byte, ricevuti \(bytes.count).") }
-        guard bytes[88] == checksum(bytes) else { throw RazerHardwareError.malformed("Checksum della risposta non valido.") }
+        guard bytes.count == length else { throw RazerHardwareError.malformed("USB response: expected 90 bytes, received \(bytes.count).") }
+        guard bytes[88] == checksum(bytes) else { throw RazerHardwareError.malformed("Invalid response checksum.") }
         guard bytes[1] == command.transaction, bytes[6] == command.commandClass, bytes[7] == command.id,
               bytes[2] == 0, bytes[3] == 0, bytes[4] == 0, bytes[89] == 0 else {
-            throw RazerHardwareError.malformed("La risposta non corrisponde al comando.")
+            throw RazerHardwareError.malformed("The response does not match the command.")
         }
-        guard bytes[5] <= 80 else { throw RazerHardwareError.malformed("Dimensione degli argomenti non valida.") }
+        guard bytes[5] <= 80 else { throw RazerHardwareError.malformed("Invalid argument size.") }
         guard bytes[0] == 2 else { throw RazerHardwareError.status(bytes[0]) }
-        guard Int(bytes[5]) == command.arguments.count else { throw RazerHardwareError.malformed("Risposta incompleta.") }
+        guard Int(bytes[5]) == command.arguments.count else { throw RazerHardwareError.malformed("Incomplete response.") }
         return Array(bytes[8..<(8 + Int(bytes[5]))])
     }
 }
@@ -126,14 +126,14 @@ final class RazerHardwareSession {
         let a = try execute(.getDPI)
         let x = Int(a[1]) * 256 + Int(a[2]), y = Int(a[3]) * 256 + Int(a[4])
         guard (100...30000).contains(x), (100...30000).contains(y) else {
-            throw RazerHardwareError.malformed("Il mouse ha restituito DPI non validi.")
+            throw RazerHardwareError.malformed("The mouse returned invalid DPI values.")
         }
         return (x, y)
     }
     func readPolling() throws -> Int {
         let a = try execute(.getPolling)
         guard let hz = [UInt8(1): 1000, 2: 500, 8: 125][a[0]] else {
-            throw RazerHardwareError.malformed("Frequenza hardware sconosciuta.")
+            throw RazerHardwareError.malformed("Unknown hardware polling rate.")
         }
         return hz
     }
@@ -142,7 +142,7 @@ final class RazerHardwareSession {
         do { a = try execute(.getMode) }
         catch RazerHardwareError.status(4) { a = try execute(.getModeAlternate) }
         guard (a[0] == 0 || a[0] == 3), a[1] == 0 else {
-            throw RazerHardwareError.malformed("Modalità hardware sconosciuta; nessuna modifica eseguita.")
+            throw RazerHardwareError.malformed("Unknown hardware mode. No change was made.")
         }
         return a[0]
     }
@@ -153,12 +153,12 @@ final class RazerHardwareSession {
             catch { warnings.append("\(label): \(error.localizedDescription)"); return nil }
         }
         let dpi = read("DPI", readDPI)
-        let polling = read("Frequenza", readPolling)
-        let battery = read("Batteria") {
+        let polling = read("Polling rate", readPolling)
+        let battery = read("Battery") {
             let arguments = try execute(.getBattery)
             return Int((Double(arguments[1]) * 100 / 255).rounded())
         }
-        let mode = read("Modalità", readMode)
+        let mode = read("Mode", readMode)
         guard dpi != nil || polling != nil || battery != nil || mode != nil else {
             throw RazerHardwareError.transport(warnings.joined(separator: "\n"))
         }

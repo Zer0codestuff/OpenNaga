@@ -2,12 +2,12 @@ import Cocoa
 import Carbon.HIToolbox
 
 enum KeyboardKeyGroup: String, CaseIterable {
-    case letters = "Lettere"
-    case numbers = "Numeri"
-    case symbols = "Simboli"
-    case navigation = "Tasti speciali"
-    case function = "Tasti funzione"
-    case keypad = "Tastierino numerico"
+    case letters = "Letters"
+    case numbers = "Numbers"
+    case symbols = "Symbols"
+    case navigation = "Special keys"
+    case function = "Function keys"
+    case keypad = "Numeric keypad"
 }
 
 struct KeyboardKey: Identifiable, Equatable {
@@ -51,10 +51,10 @@ enum KeyboardKeyCatalog {
 
     static func label(for key: String) -> String {
         let labels = [
-            "space": "Spazio", "tab": "Tab", "return": "Invio", "escape": "Esc",
+            "space": "Space", "tab": "Tab", "return": "Return", "escape": "Esc",
             "delete": "⌫", "forward delete": "⌦", "left arrow": "←", "right arrow": "→",
             "up arrow": "↑", "down arrow": "↓", "home": "↖", "end": "↘",
-            "page up": "Pag ↑", "page down": "Pag ↓", "keypad enter": "Invio num."
+            "page up": "Page ↑", "page down": "Page ↓", "keypad enter": "Enter"
         ]
         if let label = labels[key] { return label }
         if key.hasPrefix("kp") { return String(key.dropFirst(2)) }

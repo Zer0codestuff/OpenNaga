@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "computermouse", accessibilityDescription: "NagaController")
+        statusItem.button?.image = NSImage(systemSymbolName: "computermouse", accessibilityDescription: "OpenNaga")
         statusItem.button?.image?.isTemplate = true
         statusItem.button?.target = self
         statusItem.button?.action = #selector(togglePopover)
@@ -169,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ProcessInfo.processInfo.endActivity(activity)
             remappingActivity = nil
         }
-        statusItem?.button?.toolTip = active ? "NagaController · Rimappatura attiva" : "NagaController · Rimappatura in pausa"
+        statusItem?.button?.toolTip = active ? "OpenNaga · Remapping active" : "OpenNaga · Remapping paused"
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -191,23 +191,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu()
-        let settings = NSMenuItem(title: "Impostazioni…", action: #selector(showSettings), keyEquivalent: ",")
+        let settings = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         appMenu.addItem(settings)
-        let close = NSMenuItem(title: "Chiudi finestra", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        let close = NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         appMenu.addItem(close)
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Esci da NagaController", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit OpenNaga", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
         let editItem = NSMenuItem()
-        editItem.title = "Modifica"
-        let edit = NSMenu(title: "Modifica")
-        edit.addItem(withTitle: "Annulla", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "Taglia", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copia", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Incolla", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Seleziona tutto", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.title = "Edit"
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
         menu.addItem(editItem)
         NSApp.mainMenu = menu

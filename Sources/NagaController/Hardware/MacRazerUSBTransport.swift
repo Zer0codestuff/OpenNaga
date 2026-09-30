@@ -33,10 +33,10 @@ final class MacRazerUSBTransport: RazerTransport {
             && (IOHIDDeviceGetProperty($0, kIOHIDMaxFeatureReportSizeKey as CFString) as? NSNumber)?.intValue == 90
         }
         guard supported.count == 1, let selected = supported.first else {
-            throw RazerHardwareError.transport("Interfaccia USB assente o ambigua. Collegare un solo ricevitore Naga V2 HyperSpeed.")
+            throw RazerHardwareError.transport("USB interface missing or ambiguous. Connect a single Naga V2 HyperSpeed receiver.")
         }
         let result = IOHIDDeviceOpen(selected, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard result == kIOReturnSuccess else { throw ioError("Apertura USB", result) }
+        guard result == kIOReturnSuccess else { throw ioError("USB open", result) }
         device = selected
         let loop = CFRunLoopGetCurrent()!
         runLoop = loop
@@ -50,7 +50,7 @@ final class MacRazerUSBTransport: RazerTransport {
     }
 
     func exchange(_ request: [UInt8]) throws -> [UInt8] {
-        guard request.count == 90 else { throw RazerHardwareError.invalidValue("Report USB non valido.") }
+        guard request.count == 90 else { throw RazerHardwareError.invalidValue("Invalid USB report.") }
         guard let device else { throw RazerHardwareError.disconnected }
         _ = try transfer(device: device, bytes: request, reading: false)
         // Receiver-specific response wait in OpenRazer is 31ms.
@@ -94,7 +94,7 @@ final class MacRazerUSBTransport: RazerTransport {
         }
         guard result == kIOReturnSuccess else {
             Unmanaged<Transfer>.fromOpaque(context).release()
-            throw ioError(reading ? "Lettura USB" : "Invio USB", result)
+            throw ioError(reading ? "USB read" : "USB write", result)
         }
         let deadline = Date().addingTimeInterval(timeout + 0.25)
         while transfer.result == nil, Date() < deadline {
@@ -102,11 +102,11 @@ final class MacRazerUSBTransport: RazerTransport {
         }
         guard let completion = transfer.result else {
             close()
-            throw RazerHardwareError.transport("Timeout USB. Collegare nuovamente il ricevitore.")
+            throw RazerHardwareError.transport("USB timeout. Reconnect the receiver.")
         }
-        guard completion == kIOReturnSuccess else { throw ioError("Trasferimento USB", completion) }
+        guard completion == kIOReturnSuccess else { throw ioError("USB transfer", completion) }
         guard !reading || transfer.length == 90 else {
-            throw RazerHardwareError.malformed("Report USB incompleto: \(transfer.length) byte.")
+            throw RazerHardwareError.malformed("Incomplete USB report: \(transfer.length) bytes.")
         }
         return Array(UnsafeBufferPointer(start: transfer.buffer, count: 90))
     }
@@ -119,6 +119,6 @@ final class MacRazerUSBTransport: RazerTransport {
         runLoop = nil
     }
     private func ioError(_ operation: String, _ code: IOReturn) -> RazerHardwareError {
-        .transport("\(operation): errore IOKit \(String(format: "0x%08x", code)). Verificare accesso USB e permessi di Monitoraggio input.")
+        .transport("\(operation): IOKit error \(String(format: "0x%08x", code)). Check USB access and the Input Monitoring permission.")
     }
 }

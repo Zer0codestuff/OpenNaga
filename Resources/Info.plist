@@ -3,26 +3,28 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleExecutable</key>
-	<string>NagaController</string>
+	<string>OpenNaga</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.zer0codestuff.NagaController</string>
 	<key>CFBundleName</key>
-	<string>NagaController</string>
+	<string>OpenNaga</string>
+	<key>CFBundleDisplayName</key>
+	<string>OpenNaga</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.1.1</string>
+	<string>2.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>NagaController invia le scorciatoie assegnate ai pulsanti del mouse.</string>
+	<string>OpenNaga sends the shortcuts assigned to your mouse buttons.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>NagaController scans for your mouse over Bluetooth to read its battery level.</string>
+	<string>OpenNaga scans for your mouse over Bluetooth to read its battery level.</string>
 </dict>
 </plist>

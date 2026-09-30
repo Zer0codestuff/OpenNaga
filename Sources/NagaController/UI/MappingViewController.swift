@@ -10,9 +10,9 @@ final class MappingViewController: NSHostingController<NagaWorkspace> {
 }
 
 enum WorkspaceSection: String, CaseIterable {
-    case buttons = "Pulsanti"
-    case sensitivity = "Sensibilità"
-    case status = "Stato"
+    case buttons = "Buttons"
+    case sensitivity = "Sensitivity"
+    case status = "Status"
 
     var symbol: String {
         switch self {
@@ -38,9 +38,9 @@ struct NagaWorkspace: View {
                 if !model.permissionsGranted {
                     HStack(spacing: 10) {
                         Image(systemName: "hand.raised")
-                        Text("Concedi i permessi per usare le assegnazioni.")
+                        Text("Grant the permissions to use your assignments.")
                         Spacer()
-                        Button("Configura") { model.section = .status }
+                        Button("Set Up") { model.section = .status }
                     }.font(.callout).padding(.horizontal, 24).padding(.vertical, 10)
                         .background(UIStyle.inset)
                     Divider()
@@ -73,7 +73,7 @@ struct NagaWorkspace: View {
                     Text(model.serviceStatus)
                     Spacer()
                     Image(systemName: "menubar.rectangle")
-                    Text("Resta attiva quando chiudi la finestra")
+                    Text("Keeps running when you close the window")
                 }.font(.system(size: 11)).foregroundStyle(.secondary)
                     .padding(.horizontal, 20).frame(height: 32)
             }
@@ -98,10 +98,7 @@ struct NagaWorkspace: View {
             HStack(spacing: 10) {
                 Image(systemName: "computermouse.fill").font(.system(size: 24, weight: .light))
                     .foregroundStyle(UIStyle.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Naga").font(.system(size: 22, weight: .semibold))
-                    Text("Controller").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+                Text("OpenNaga").font(.system(size: 22, weight: .semibold))
             }.padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 34)
             VStack(spacing: 4) {
                 ForEach(WorkspaceSection.allCases, id: \.self) { section in
@@ -124,11 +121,11 @@ struct NagaWorkspace: View {
                     Text("Naga V2 HyperSpeed").font(.system(size: 12, weight: .medium))
                     HStack(spacing: 6) {
                         StatusDot(active: model.connected)
-                        Text(model.connected ? model.transport ?? "Connesso" : "Mouse scollegato")
+                        Text(model.connected ? model.transport ?? "Connected" : "Mouse disconnected")
                     }.font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()
-                Toggle("Rimappatura", isOn: Binding(
+                Toggle("Remapping", isOn: Binding(
                     get: { model.remappingEnabled }, set: model.setRemapping
                 )).toggleStyle(.switch).controlSize(.small).font(.system(size: 12))
             }.padding(18)
@@ -140,33 +137,33 @@ struct NagaWorkspace: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.section.rawValue).font(.system(size: 22, weight: .semibold))
-                Text(model.section == .buttons ? "Il tuo mouse, le tue assegnazioni." : model.section == .sensitivity ? "Sensore e controlli hardware" : "Connessione e funzionamento")
+                Text(model.section == .buttons ? "Your mouse, your assignments." : model.section == .sensitivity ? "Sensor and hardware controls" : "Connection and service")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Spacer()
-            Picker("Profilo", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
+            Picker("Profile", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
             }.frame(width: 205)
             Menu {
-                Button("Gestisci profili…") { manageProfiles = true }
+                Button("Manage Profiles…") { manageProfiles = true }
                 Divider()
-                Button("Importa profili…") { model.importProfiles() }
-                Button("Esporta profili…") { model.exportProfiles() }
+                Button("Import Profiles…") { model.importProfiles() }
+                Button("Export Profiles…") { model.exportProfiles() }
             } label: { Image(systemName: "ellipsis.circle").font(.system(size: 17)) }
-            .menuStyle(.borderlessButton).frame(width: 24).help("Gestisci, importa o esporta profili")
+            .menuStyle(.borderlessButton).frame(width: 24).help("Manage, import or export profiles")
         }.padding(.horizontal, 24).frame(height: 88)
     }
 }
 
 func buttonName(_ index: Int) -> String {
     switch index {
-    case 13: return "DPI su"
-    case 14: return "DPI giù"
-    case 15: return "Rotella a sinistra"
-    case 16: return "Rotella a destra"
-    case 17: return "Clic centrale"
-    case 18: return "Clic sinistro"
-    case 19: return "Clic destro"
-    default: return "Pulsante laterale \(index)"
+    case 13: return "DPI up"
+    case 14: return "DPI down"
+    case 15: return "Wheel tilt left"
+    case 16: return "Wheel tilt right"
+    case 17: return "Middle click"
+    case 18: return "Left click"
+    case 19: return "Right click"
+    default: return "Side button \(index)"
     }
 }

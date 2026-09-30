@@ -70,3 +70,5 @@ dmg-assets/temp.dmg
 .build/
 /NagaController.app
 /NagaController-v*.dmg
+/OpenNaga.app
+/OpenNaga-v*.dmg
