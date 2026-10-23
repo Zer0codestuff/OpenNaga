@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.updateStatusItem()
                 }
             })
+            AppProfileSwitcher.shared.start()
             PermissionManager.shared.requestMissingPermissions()
             HIDListener.shared.start()
             RazerDeviceController.shared.refresh()
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hardwareRefreshTimer?.invalidate()
         if let remappingActivity { ProcessInfo.processInfo.endActivity(remappingActivity) }
         remappingActivity = nil
+        AppProfileSwitcher.shared.stop()
         EventTapManager.shared.stop()
         HIDListener.shared.stop()
         observers.forEach(NotificationCenter.default.removeObserver)

@@ -6,7 +6,7 @@ final class MainViewController: NSViewController {
         let host = NSHostingController(rootView: NagaPopover())
         addChild(host)
         view = host.view
-        preferredContentSize = NSSize(width: 320, height: 288)
+        preferredContentSize = NSSize(width: 320, height: 336)
     }
 
     func refreshPermissionStatuses() { WorkspaceModel.shared.refresh() }
@@ -31,6 +31,14 @@ private struct NagaPopover: View {
             Toggle("Remapping", isOn: Binding(
                 get: { model.remappingEnabled }, set: model.setRemapping
             )).toggleStyle(.switch).controlSize(.small).disabled(model.onboardActive || model.onboardOnly || RazerDeviceController.shared.isBusy)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Switch profiles by app", isOn: Binding(get: { model.autoSwitch }, set: model.setAutoSwitch))
+                    .toggleStyle(.switch).controlSize(.small)
+                if model.autoSwitch, model.runtimeProfile != model.profile {
+                    Text("Using \(model.runtimeProfile) for \(model.frontmostApp ?? "this app")")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
             HStack(spacing: 7) {
                 StatusDot(active: model.connected && model.remappingActive)
                 Text(model.serviceStatus)
@@ -46,7 +54,7 @@ private struct NagaPopover: View {
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
             }.font(.callout)
-        }.padding(20).frame(width: 320, height: 288).tint(UIStyle.accent)
+        }.padding(20).frame(width: 320, height: 336).tint(UIStyle.accent)
             .onAppear { model.refresh() }
     }
 }

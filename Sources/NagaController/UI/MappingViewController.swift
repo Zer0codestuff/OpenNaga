@@ -11,12 +11,14 @@ final class MappingViewController: NSHostingController<NagaWorkspace> {
 
 enum WorkspaceSection: String, CaseIterable {
     case buttons = "Buttons"
+    case appProfiles = "App Profiles"
     case sensitivity = "Sensitivity"
     case status = "Status"
 
     var symbol: String {
         switch self {
         case .buttons: return "square.grid.3x3"
+        case .appProfiles: return "app.badge"
         case .sensitivity: return "speedometer"
         case .status: return "info.circle"
         }
@@ -64,6 +66,7 @@ struct NagaWorkspace: View {
                             }.frame(width: 340)
                                 .background(.background.opacity(0.45))
                         }
+                    case .appProfiles: AppProfilesPane()
                     case .sensitivity: SensitivityPane()
                     case .status: StatusPane()
                     }
@@ -94,6 +97,10 @@ struct NagaWorkspace: View {
                 selectedButton = button
             }
             if args.contains("--snapshot-hypershift") { model.layer = .hypershift }
+            if args.contains("--snapshot"), let index = args.firstIndex(of: "--snapshot-section"),
+               args.indices.contains(index + 1), let section = WorkspaceSection(rawValue: args[index + 1]) {
+                model.section = section
+            }
         }
     }
 
@@ -145,7 +152,7 @@ struct NagaWorkspace: View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.section.rawValue).font(.system(size: 22, weight: .semibold))
-                Text(model.section == .buttons ? "Your mouse, your assignments." : model.section == .sensitivity ? "Sensor and hardware controls" : "Connection and service")
+                Text(model.section == .buttons ? "Your mouse, your assignments." : model.section == .appProfiles ? "A profile for each app" : model.section == .sensitivity ? "Sensor and hardware controls" : "Connection and service")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Spacer()

@@ -23,6 +23,11 @@ final class WorkspaceModel: ObservableObject {
     @Published var error: String?
     @Published var revision = 0
     @Published var activeButton: Int?
+    @Published var autoSwitch = false
+    @Published var appBindings: [String: String] = [:]
+    /// The profile whose mapping is live; differs from `profile` while an app binding applies.
+    @Published var runtimeProfile = ""
+    @Published var frontmostApp: String?
     private var subscriptions = Set<AnyCancellable>()
 
     private init() {
@@ -31,7 +36,8 @@ final class WorkspaceModel: ObservableObject {
             RazerDeviceController.didUpdateNotification,
             NSApplication.didBecomeActiveNotification,
             EventTapManager.didUpdateNotification,
-            PermissionManager.didUpdateNotification
+            PermissionManager.didUpdateNotification,
+            AppProfileSwitcher.didUpdateNotification
         ]
         for name in names {
             NotificationCenter.default.publisher(for: name)
@@ -67,6 +73,10 @@ final class WorkspaceModel: ObservableObject {
         transport = HIDListener.shared.transport
         permissionsGranted = PermissionManager.shared.hasAccessibilityPermission() && PermissionManager.shared.hasInputMonitoringPermission()
         remappingActive = EventTapManager.shared.isRunning && EventTapManager.shared.isRemappingEnabled
+        autoSwitch = config.autoSwitchEnabled
+        appBindings = config.appProfiles
+        runtimeProfile = config.runtimeProfileName
+        frontmostApp = AppProfileSwitcher.shared.frontmostName
         revision += 1
     }
 
@@ -109,6 +119,16 @@ final class WorkspaceModel: ObservableObject {
         guard layer == .hypershift else { return standard }
         if isHypershiftKey(button) { return "Hypershift key" }
         return hypershiftMapping[button]?.displayName ?? "Standard: \(standard)"
+    }
+
+    func setAutoSwitch(_ enabled: Bool) {
+        ConfigManager.shared.setAutoSwitchEnabled(enabled)
+        refresh()
+    }
+
+    func bind(_ bundleID: String, to profile: String?) {
+        ConfigManager.shared.setAppProfile(profile, forBundleIdentifier: bundleID)
+        refresh()
     }
 
     func selectProfile(_ name: String) {

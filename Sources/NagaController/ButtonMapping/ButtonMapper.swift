@@ -75,6 +75,15 @@ final class ButtonMapper {
         hypershiftMapping = hypershift.filter { if case .hypershift = $0.value { return false }; return true }
     }
 
+    /// Replaces the assignments for the next press without touching what is
+    /// held now. Outputs release by button index, so a key started under the
+    /// old mapping still ends with its own key-up. Used for automatic profile
+    /// changes, which can land while a mapped button is physically down.
+    func swapMapping(_ newMapping: [Int: ActionType], hypershift: [Int: ActionType] = [:]) {
+        mapping = newMapping
+        hypershiftMapping = hypershift.filter { if case .hypershift = $0.value { return false }; return true }
+    }
+
     func releaseAll() {
         syntheticScrollScaler.reset()
         generation += 1

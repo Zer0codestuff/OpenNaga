@@ -13,6 +13,9 @@ struct Settings: Codable {
     var currentProfile: String?
     var autoSwitchProfiles: Bool?
     var showNotifications: Bool?
+    // Bundle identifier -> profile name, used while that app is frontmost.
+    // Absent in files written before per-app profiles existed.
+    var appProfiles: [String: String]? = nil
 }
 
 struct Profile: Codable {
@@ -51,7 +54,15 @@ final class ConfigManager {
     private var defaults = UserDefaults.standard
 
     private(set) var profiles: [String: Profile] = [:]
+    /// The profile the user selected. It is what the editor shows, what is
+    /// persisted and what Save to Mouse writes.
     private(set) var currentProfileName: String = "Default"
+    /// The profile whose mapping is live. It differs from the selected one
+    /// only while an app binding applies; it is never persisted.
+    private(set) var runtimeProfileName: String = "Default"
+    private(set) var autoSwitchEnabled = false
+    private(set) var appProfiles: [String: String] = [:]
+    private var showNotifications: Bool?
     private(set) var scrollSensitivity: ScrollSensitivity
 
     init(storageURL: URL? = nil, defaults: UserDefaults = .standard) {
@@ -111,15 +122,48 @@ final class ConfigManager {
         if profiles[currentProfileName] == nil {
             currentProfileName = profiles.keys.sorted().first ?? "Default"
         }
+        autoSwitchEnabled = mergedSettings?.autoSwitchProfiles ?? false
+        appProfiles = mergedSettings?.appProfiles ?? [:]
+        showNotifications = mergedSettings?.showNotifications
+        runtimeProfileName = currentProfileName
         updateRuntimeMapping()
         notify()
     }
 
+    /// An explicit choice. It also takes over the live mapping until the next
+    /// app change, so a manual switch is never undone by an app binding.
     func setCurrentProfile(_ name: String) {
         guard profiles[name] != nil else { return }
         currentProfileName = name
+        runtimeProfileName = name
         defaults.set(name, forKey: kCurrentProfileKey)
         updateRuntimeMapping()
+        saveUserProfiles()
+    }
+
+    /// Makes `name` the live profile without selecting it. Held buttons keep
+    /// the output they started. Nothing is saved.
+    func applyAutomaticProfile(_ name: String) {
+        guard profiles[name] != nil, name != runtimeProfileName else { return }
+        runtimeProfileName = name
+        updateRuntimeMapping(preservingHolds: true)
+        notify()
+    }
+
+    func setAutoSwitchEnabled(_ enabled: Bool) {
+        guard enabled != autoSwitchEnabled else { return }
+        autoSwitchEnabled = enabled
+        saveUserProfiles()
+    }
+
+    func setAppProfile(_ profile: String?, forBundleIdentifier bundleID: String) {
+        guard !bundleID.isEmpty else { return }
+        if let profile {
+            guard profiles[profile] != nil else { return }
+            appProfiles[bundleID] = profile
+        } else {
+            appProfiles.removeValue(forKey: bundleID)
+        }
         saveUserProfiles()
     }
 
@@ -147,7 +191,15 @@ final class ConfigManager {
     }
 
     func mappingForCurrentProfile(layer: MappingLayer = .standard) -> [Int: ActionType] {
-        guard let profile = profiles[currentProfileName] else { return [:] }
+        mapping(ofProfile: currentProfileName, layer: layer)
+    }
+
+    func mappingForRuntimeProfile(layer: MappingLayer = .standard) -> [Int: ActionType] {
+        mapping(ofProfile: runtimeProfileName, layer: layer)
+    }
+
+    private func mapping(ofProfile name: String, layer: MappingLayer) -> [Int: ActionType] {
+        guard let profile = profiles[name] else { return [:] }
         var result: [Int: ActionType] = [:]
         for (key, action) in profile.buttons(in: layer) {
             if let idx = Int(key), (1...19).contains(idx), let mapped = convert(action: action) {
@@ -211,7 +263,9 @@ final class ConfigManager {
             }
             profiles[name] = profile
         }
+        for (bundleID, bound) in appProfiles where bound == oldName { appProfiles[bundleID] = newTrim }
         if currentProfileName == oldName { currentProfileName = newTrim }
+        if runtimeProfileName == oldName { runtimeProfileName = newTrim }
         defaults.set(currentProfileName, forKey: kCurrentProfileKey)
         updateRuntimeMapping()
         saveUserProfiles()
@@ -224,13 +278,15 @@ final class ConfigManager {
         // Prevent deleting the last profile
         if profiles.count <= 1 { return false }
         profiles.removeValue(forKey: name)
+        appProfiles = appProfiles.filter { $0.value != name }
         if currentProfileName == name {
             // Switch to an arbitrary remaining profile
             if let next = profiles.keys.sorted().first {
                 setCurrentProfile(next)
             }
         } else {
-            // refresh mapping for current profile
+            if runtimeProfileName == name { runtimeProfileName = currentProfileName }
+            // refresh mapping for the live profile
             updateRuntimeMapping()
         }
         saveUserProfiles()
@@ -247,10 +303,14 @@ final class ConfigManager {
         } else {
             profiles = pf.profiles
         }
+        let importedBindings = (pf.settings?.appProfiles ?? [:]).filter { profiles[$0.value] != nil }
+        appProfiles = merge ? appProfiles.merging(importedBindings) { _, imported in imported } : importedBindings
+        appProfiles = appProfiles.filter { profiles[$0.value] != nil }
         if let cp = pf.settings?.currentProfile, profiles[cp] != nil {
             setCurrentProfile(cp)
         } else {
             if profiles[currentProfileName] == nil { currentProfileName = profiles.keys.sorted().first ?? "Default" }
+            if profiles[runtimeProfileName] == nil { runtimeProfileName = currentProfileName }
             updateRuntimeMapping()
         }
         saveUserProfiles()
@@ -266,11 +326,16 @@ final class ConfigManager {
     }
 
     func exportAllProfiles(to url: URL) throws {
-        let pf = ProfilesFile(profiles: profiles, settings: Settings(currentProfile: currentProfileName, autoSwitchProfiles: nil, showNotifications: nil))
+        let pf = ProfilesFile(profiles: profiles, settings: persistedSettings())
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(pf)
         try data.write(to: url, options: .atomic)
+    }
+
+    private func persistedSettings() -> Settings {
+        Settings(currentProfile: currentProfileName, autoSwitchProfiles: autoSwitchEnabled, showNotifications: showNotifications,
+                 appProfiles: appProfiles.isEmpty ? nil : appProfiles)
     }
 
     private func convert(action: ButtonAction) -> ActionType? {
@@ -360,7 +425,7 @@ final class ConfigManager {
         do {
             let url = try userProfilesURL()
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let pf = ProfilesFile(profiles: profiles, settings: Settings(currentProfile: currentProfileName, autoSwitchProfiles: nil, showNotifications: nil))
+            let pf = ProfilesFile(profiles: profiles, settings: persistedSettings())
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(pf)
@@ -376,10 +441,15 @@ final class ConfigManager {
         DispatchQueue.main.async { NotificationCenter.default.post(name: Self.didChangeNotification, object: self) }
     }
 
-    private func updateRuntimeMapping() {
+    private func updateRuntimeMapping(preservingHolds: Bool = false) {
         let onboard = currentProfileIsOnboardOnly
-        ButtonMapper.shared.updateMapping(onboard ? [:] : mappingForCurrentProfile(),
-                                          hypershift: onboard ? [:] : mappingForCurrentProfile(layer: .hypershift))
+        let standard = onboard ? [:] : mappingForRuntimeProfile()
+        let shifted = onboard ? [:] : mappingForRuntimeProfile(layer: .hypershift)
+        if preservingHolds {
+            ButtonMapper.shared.swapMapping(standard, hypershift: shifted)
+        } else {
+            ButtonMapper.shared.updateMapping(standard, hypershift: shifted)
+        }
     }
 
     private func userProfilesURL() throws -> URL {

@@ -11,10 +11,11 @@ OpenNaga is an independent project, not affiliated with or endorsed by Razer. It
 
 ## Features
 
-- Adaptive macOS settings window with a restrained green accent and three sections: Buttons, Sensitivity, Status
+- Adaptive macOS settings window with a restrained green accent and four sections: Buttons, App Profiles, Sensitivity, Status
 - Interactive mouse photographs with side-button highlights, a top view and a matching assignment grid for all 19 logical controls
 - Actions per button: keyboard keys selected by category or recorded, with optional modifiers, multi-step key sequence, mouse action (browser back/forward, real mouse buttons 4/5, middle/left/right click, scroll), launch application, shell command, macro, profile switch, disabled, or original passthrough
 - Hypershift layer: assign Hypershift key to a control, then give any other control a second action that applies only while you hold it. Controls without a Hypershift action keep their standard one. Save to Mouse stores both layers, so Hypershift also works with the app closed. See [Hypershift layer](#hypershift-layer)
+- App profiles: bind a profile to any app, and OpenNaga loads it whenever that app comes to the front. Done in software, so it works over Bluetooth. See [App profiles](#app-profiles)
 - Held keyboard modifiers combine with the mouse's keys: Command plus a side button that sends C produces Command-C. This applies to remapped buttons, unmapped buttons and profiles saved to mouse memory, including keypad keys, key sequences and shortcuts. macOS does not apply modifiers held on one keyboard to keys from another device, so OpenNaga re-sends such mouse keys with the held modifiers while it is running. With a profile saved to or imported from the mouse this is always on; otherwise it follows the Remapping switch. Without the app, the mouse's keys arrive without keyboard modifiers.
 - System editor with 25 actions for audio, playback, brightness, screenshots, windows, spaces and macOS tools, with a preview button
 - Existing text snippets remain saved and can be replaced through the Keys editor
@@ -65,6 +66,16 @@ While the Hypershift key is held, controls with a Hypershift action perform it a
 Use a control that reports when it is held and that you can hold while pressing the others, for example a side button under your thumb combined with wheel clicks and tilts. Wheel tilt without driver mode arrives as scroll events with no hold, so it cannot act as a Hypershift key in the app. A left or right click assigned to Hypershift key no longer clicks.
 
 In the app, OpenNaga applies the layer while remapping is on. **Save to Mouse** writes both layers to the mouse, so the Hypershift key keeps working with the app closed, after a power cycle and on other computers. In mouse memory the Hypershift layer can also hold DPI up and down. The left click cannot be the Hypershift key there, so the mouse always keeps a working click. Profiles written before this feature load unchanged; the layer is stored as an optional `hypershift` map next to `buttons` in `profiles.json` and in exported files.
+
+## App profiles
+
+App Profiles gives an app its own profile, so the same side button can do different things in Safari, Notes or a game.
+
+1. Open App Profiles and turn on Switch profiles by app.
+2. Choose Add Application, pick an installed or running app (or Choose Other for one elsewhere), and pick the profile it should use.
+3. Come back to any other app and the profile you selected in the menu bar or in Buttons applies again.
+
+OpenNaga watches which app is in front and swaps the live assignments; nothing is written to the mouse, so this works over Bluetooth. Only apps that appear in the Dock count, so Spotlight and menu bar helpers do not flip the profile. A button held while you switch apps still ends with the key it started. Choosing a profile by hand applies at once and stays until the next app change. While OpenNaga's own window is in front, the profile you selected is the live one, so what you edit is what you test. Switching pauses while a profile saved in the mouse or imported from it is active, because those never remap in software. Deleting or renaming a profile updates its app bindings. Bindings are stored in `profiles.json` under `settings.appProfiles`, a map from bundle identifier to profile name; older files load unchanged.
 
 ## Save a profile to the mouse
 
@@ -211,6 +222,7 @@ The Swift package, target and source folder keep the internal name `NagaControll
 
 Profiles, the mouse backup and the driver mode journal live in `~/Library/Application Support/OpenNaga`. Up to 2.3.0 OpenNaga shared the `NagaController` folder with [NagaController](https://github.com/DParent10/NagaController). Since 2.4.0 it reads that folder once to import older data and never writes to it, so the two apps no longer overwrite each other's profiles.
 
+- `Sources/NagaController/AppProfiles/` frontmost-app observer, profile resolution and installed-app catalog
 - `Sources/NagaController/ButtonMapping/` action model, event synthesis, layout-aware browser shortcuts
 - `Sources/NagaController/EventTap/` CGEvent tap and correlation with HID input
 - `Sources/NagaController/HID/` IOHID listener and pure report decoding
