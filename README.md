@@ -29,7 +29,7 @@ OpenNaga is an independent project, not affiliated with or endorsed by Razer. It
 - Settings appear in the Dock and Command-Tab while the window is open
 - Remapping activity prevents App Nap while allowing normal system sleep
 
-Release 2.6.0 adds the Hypershift layer, stored in mouse memory as well, and applies held keyboard modifiers to the keys of a profile saved in the mouse. See the [release notes](Documentation/release-2.6.0.md) for changes and verified behavior.
+Release 2.7.0 adds automatic per-app profile switching in software, including over Bluetooth. See the [release notes](Documentation/release-2.7.0.md) for changes and verification limits.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Release 2.6.0 adds the Hypershift layer, stored in mouse memory as well, and app
 
 ## Install and first run
 
-1. Download `OpenNaga-v2.6.0.dmg` from the [latest release](https://github.com/Zer0codestuff/OpenNaga/releases/latest), or build the app bundle (see below).
+1. Download `OpenNaga-v2.7.0.dmg` from the [latest release](https://github.com/Zer0codestuff/OpenNaga/releases/latest), or build the app bundle (see below).
 2. Open the DMG and drag `OpenNaga.app` to Applications. Permissions are tied to the app location, so do not move it afterwards.
 3. The release is not notarized. On first launch right-click the app and choose Open, or run `xattr -dr com.apple.quarantine /Applications/OpenNaga.app`.
 4. Launch it. macOS prompts for two permissions; both are required:
