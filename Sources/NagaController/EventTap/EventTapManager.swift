@@ -152,6 +152,8 @@ final class EventTapManager {
             return Unmanaged.passUnretained(event)
         }
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // While the tap is disabled every button passes through unremapped.
+            NSLog("[EventTap] Disabled by the system (%@); re-enabling.", type == .tapDisabledByTimeout ? "timeout" : "user input")
             manager.resetInputState()
             if let tap = manager.eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
             return Unmanaged.passUnretained(event)
@@ -182,6 +184,8 @@ final class EventTapManager {
         default: return Unmanaged.passUnretained(event)
         }
         guard let button else { return manager.passKey(event, type) }
+        // Never wait here: this tap is blocking, so everything the callback holds
+        // up, including mouse movement and clicks, waits with it.
         guard HIDListener.shared.consume(buttonIndex: button, down: down, timestamp: Double(event.timestamp) / 1_000_000_000) else {
             if type == .keyDown || type == .keyUp { manager.repeatOwnership.invalidate(button: button) }
             return manager.passKey(event, type)

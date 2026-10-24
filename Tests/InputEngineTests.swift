@@ -70,6 +70,32 @@ enum InputEngineTests {
         matcher.reset()
         try check(!matcher.consume(button: 1, down: true, timestamp: 13), "Reset clears evidence")
 
+        // The tap can handle a press after the HID thread has already recorded
+        // the release, when a game keeps the main thread busy. The press must
+        // still match: the matcher compares hardware timestamps, not callback time.
+        matcher.record(button: 2, down: true, timestamp: 20.000)
+        matcher.record(button: 2, down: false, timestamp: 20.080)
+        try check(matcher.consume(button: 2, down: true, timestamp: 20.000), "A press handled after its release was recorded still matches")
+        try check(matcher.consume(button: 2, down: false, timestamp: 20.080), "The release still matches too")
+        matcher.record(button: 2, down: true, timestamp: 21.000)
+        matcher.record(button: 2, down: true, timestamp: 21.500)
+        try check(matcher.consume(button: 2, down: true, timestamp: 21.000), "A press handled half a second late still matches")
+        matcher.record(button: 3, down: true, timestamp: 22.000)
+        matcher.record(button: 3, down: false, timestamp: 23.500)
+        try check(!matcher.consume(button: 3, down: true, timestamp: 22.000), "Edges older than the retention are dropped")
+        matcher.record(button: 4, down: true, timestamp: 24.000)
+        try check(!matcher.consume(button: 4, down: true, timestamp: 24.100), "A late edge still cannot match an unrelated event 100 ms away")
+
+        // The HID thread records while the tap consumes, so the shared store is locked.
+        let edges = CorrelatedEdges()
+        try check(!edges.consume(button: 2, down: true, timestamp: 30), "A missing edge returns at once")
+        edges.record(button: 2, down: true, timestamp: 30)
+        try check(edges.consume(button: 2, down: true, timestamp: 30), "A recorded edge matches")
+        try check(!edges.consume(button: 2, down: true, timestamp: 30), "An edge is consumed once")
+        edges.record(button: 6, down: true, timestamp: 33)
+        edges.reset()
+        try check(!edges.consume(button: 6, down: true, timestamp: 33), "Reset clears recorded edges")
+
         // Fixtures reconstructed from published PR2850 protocol facts, not device captures.
         let held: [UInt8] = [4, 0x20, 0x21, 0x22, 0x23] + Array(repeating: 0, count: 11)
         try check(NagaInput.driverButtons(report: held) == Set([13, 14, 15, 16]), "Driver held set")
