@@ -122,35 +122,25 @@ struct InputEdgeMatcher {
     mutating func reset() { edges.removeAll() }
 }
 
-/// Edges recorded on the HID thread and consumed by the event tap. The two
-/// run on different threads with no guaranteed order, so a consumer can ask
-/// for an edge the HID thread has not recorded yet and wait briefly for it.
+/// Edges recorded on the HID thread and consumed by the event tap, which run
+/// on different threads. Consuming never waits: the tap is blocking, so any
+/// wait there stalls every mouse event behind it.
 final class CorrelatedEdges {
-    private let condition = NSCondition()
+    private let lock = NSLock()
     private var matcher = InputEdgeMatcher()
 
     func record(button: Int, down: Bool, timestamp: TimeInterval) {
-        condition.lock()
+        lock.lock(); defer { lock.unlock() }
         matcher.record(button: button, down: down, timestamp: timestamp)
-        condition.broadcast()
-        condition.unlock()
     }
 
-    /// - Parameter waitUpTo: how long to wait for a matching edge that has not
-    ///   arrived. Zero returns at once.
-    func consume(button: Int, down: Bool, timestamp: TimeInterval, waitUpTo: TimeInterval = 0) -> Bool {
-        condition.lock()
-        defer { condition.unlock() }
-        let deadline = Date(timeIntervalSinceNow: waitUpTo)
-        repeat {
-            if matcher.consume(button: button, down: down, timestamp: timestamp) { return true }
-        } while waitUpTo > 0 && condition.wait(until: deadline)
-        return false
+    func consume(button: Int, down: Bool, timestamp: TimeInterval) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return matcher.consume(button: button, down: down, timestamp: timestamp)
     }
 
     func reset() {
-        condition.lock()
+        lock.lock(); defer { lock.unlock() }
         matcher.reset()
-        condition.unlock()
     }
 }

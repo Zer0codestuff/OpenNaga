@@ -86,23 +86,12 @@ enum InputEngineTests {
         matcher.record(button: 4, down: true, timestamp: 24.000)
         try check(!matcher.consume(button: 4, down: true, timestamp: 24.100), "A late edge still cannot match an unrelated event 100 ms away")
 
-        // A system event can also reach the tap before the HID thread records its edge.
+        // The HID thread records while the tap consumes, so the shared store is locked.
         let edges = CorrelatedEdges()
-        try check(!edges.consume(button: 2, down: true, timestamp: 30), "Without a wait a missing edge returns at once")
+        try check(!edges.consume(button: 2, down: true, timestamp: 30), "A missing edge returns at once")
         edges.record(button: 2, down: true, timestamp: 30)
-        try check(edges.consume(button: 2, down: true, timestamp: 30), "A recorded edge matches without waiting")
-        let sender = Thread {
-            Thread.sleep(forTimeInterval: 0.02)
-            edges.record(button: 2, down: true, timestamp: 31)
-        }
-        sender.start()
-        let waitStart = Date()
-        try check(edges.consume(button: 2, down: true, timestamp: 31, waitUpTo: 1), "A waiting consumer receives an edge recorded later")
-        try check(Date().timeIntervalSince(waitStart) < 0.9, "The wait ends as soon as the edge arrives")
-        let missStart = Date()
-        try check(!edges.consume(button: 5, down: true, timestamp: 32, waitUpTo: 0.03), "An edge that never arrives times out")
-        let missed = Date().timeIntervalSince(missStart)
-        try check(missed >= 0.025 && missed < 0.5, "The timeout is about the requested wait")
+        try check(edges.consume(button: 2, down: true, timestamp: 30), "A recorded edge matches")
+        try check(!edges.consume(button: 2, down: true, timestamp: 30), "An edge is consumed once")
         edges.record(button: 6, down: true, timestamp: 33)
         edges.reset()
         try check(!edges.consume(button: 6, down: true, timestamp: 33), "Reset clears recorded edges")

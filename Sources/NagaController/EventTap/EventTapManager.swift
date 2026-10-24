@@ -136,20 +136,6 @@ final class EventTapManager {
         DispatchQueue.main.async { NotificationCenter.default.post(name: Self.didUpdateNotification, object: self) }
     }
 
-    /// The system event for a mouse button can reach the tap before the HID
-    /// thread has recorded the mouse's own edge, most often while a game keeps
-    /// the CPU busy. Without the edge the event is taken for a keyboard press
-    /// and the original key reaches the game. The wait ends the moment the
-    /// edge is recorded, so it only runs to its end for a real keyboard press
-    /// of a key that is mapped while the mouse is connected.
-    static let lateEdgeWait: TimeInterval = 0.02
-
-    private func lateEdgeWait(for button: Int) -> TimeInterval {
-        guard HIDListener.shared.connectedDeviceName != nil,
-              ButtonMapper.shared.hasMapping(buttonIndex: button) else { return 0 }
-        return Self.lateEdgeWait
-    }
-
     private static let eventCallback: CGEventTapCallBack = { (proxy, type, event, refcon) in
         guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
         let manager = Unmanaged<EventTapManager>.fromOpaque(refcon).takeUnretainedValue()
@@ -198,16 +184,11 @@ final class EventTapManager {
         default: return Unmanaged.passUnretained(event)
         }
         guard let button else { return manager.passKey(event, type) }
-        let wait = manager.lateEdgeWait(for: button)
-        let started = DispatchTime.now().uptimeNanoseconds
-        guard HIDListener.shared.consume(buttonIndex: button, down: down, timestamp: Double(event.timestamp) / 1_000_000_000, waitUpTo: wait) else {
-            // The key is not identified here: it may be an ordinary keyboard press.
-            if manager.traceEnabled, wait > 0 { ModifierTrace.log("mapped control event had no mouse edge after \(elapsedMilliseconds(since: started)) ms, passed through") }
+        // Never wait here: this tap is blocking, so everything the callback holds
+        // up, including mouse movement and clicks, waits with it.
+        guard HIDListener.shared.consume(buttonIndex: button, down: down, timestamp: Double(event.timestamp) / 1_000_000_000) else {
             if type == .keyDown || type == .keyUp { manager.repeatOwnership.invalidate(button: button) }
             return manager.passKey(event, type)
-        }
-        if manager.traceEnabled, wait > 0, elapsedMilliseconds(since: started) >= 1 {
-            ModifierTrace.log("button=\(button) \(down ? "down" : "up") waited \(elapsedMilliseconds(since: started)) ms for the mouse edge")
         }
         if down {
             guard ButtonMapper.shared.hasMapping(buttonIndex: button) else { return manager.passKey(event, type) }
@@ -274,8 +255,4 @@ final class EventTapManager {
             && !ScrollEventScaler.hasMotion(event, axis: .horizontal) { return nil }
         return Unmanaged.passUnretained(event)
     }
-}
-
-private func elapsedMilliseconds(since start: UInt64) -> Int {
-    Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
 }

@@ -122,10 +122,8 @@ final class HIDListener {
         return HIDKeyboardUsage.usages(forKeyCode: keyCode).contains { nativeKeysHeld.contains($0) }
     }
 
-    /// - Parameter waitUpTo: how long to wait for the mouse's HID edge when the
-    ///   system event arrives first. The wait ends the moment the edge is recorded.
-    func consume(buttonIndex: Int, down: Bool, timestamp: TimeInterval, waitUpTo: TimeInterval = 0) -> Bool {
-        matcher.consume(button: buttonIndex, down: down, timestamp: timestamp, waitUpTo: waitUpTo)
+    func consume(buttonIndex: Int, down: Bool, timestamp: TimeInterval) -> Bool {
+        matcher.consume(button: buttonIndex, down: down, timestamp: timestamp)
     }
 
     func consumeScroll(vertical: Bool, horizontal: Bool, shifted: Bool, timestamp: TimeInterval) -> ScrollInputMatcher.Match {
