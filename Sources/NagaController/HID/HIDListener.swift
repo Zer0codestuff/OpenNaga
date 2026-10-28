@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import IOKit.hid
 import Darwin
 
@@ -15,6 +16,11 @@ final class HIDListener {
     private(set) var lastInputDescription = "No input detected. The DPI buttons require a recognized driver report."
     private let lock = NSLock()
     private var matcher = InputEdgeMatcher()
+    // Every key from the mouse's keyboard interface, keyed by HID usage, so
+    // native keys can receive modifiers held on another keyboard.
+    private var nativeKeyMatcher = InputEdgeMatcher()
+    private var nativeKeysHeld: Set<UInt32> = []
+    private var scrollMatcher = ScrollInputMatcher()
     private var runLoop: CFRunLoop?
     private var thread: Thread?
     private var manager: IOHIDManager?
@@ -25,9 +31,6 @@ final class HIDListener {
     private var heldButtons = Set<Int>()
     private var desiredRunning = false
     private var valueStates: [String: Bool] = [:]
-    // Issue 7: last correlated wheel tick, so the event tap can scale the
-    // Naga's own scroll output without touching other devices.
-    private var lastWheelTick: TimeInterval?
     private init() {}
 
     // Explicit lifecycle keeps pure tests and model access free of hardware I/O.
@@ -99,30 +102,30 @@ final class HIDListener {
     }
 
     func resetCorrelation() {
-        lock.lock(); matcher.reset(); lastWheelTick = nil; lock.unlock()
+        lock.lock(); matcher.reset(); scrollMatcher.reset(); nativeKeyMatcher.reset(); lock.unlock()
     }
 
+    /// Consumes a mouse key edge for any HID usage that produces `keyCode`.
+    func consumeNativeKey(keyCode: CGKeyCode, down: Bool, timestamp: TimeInterval) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return HIDKeyboardUsage.usages(forKeyCode: keyCode).contains {
+            nativeKeyMatcher.consume(button: Int($0), down: down, timestamp: timestamp)
+        }
+    }
+
+    func isNativeKeyHeld(keyCode: CGKeyCode) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return HIDKeyboardUsage.usages(forKeyCode: keyCode).contains { nativeKeysHeld.contains($0) }
+    }
 
     func consume(buttonIndex: Int, down: Bool, timestamp: TimeInterval) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return matcher.consume(button: buttonIndex, down: down, timestamp: timestamp)
     }
 
-    // Issue 7: wheel ticks are not buttons, but recording them lets the event
-    // tap prove a scroll event came from the Naga before scaling it. Tilt
-    // keeps its real controls 15 and 16.
-    private func recordWheelTick(timestamp: TimeInterval) {
-        lock.lock()
-        lastWheelTick = timestamp
-        lock.unlock()
-    }
-
-    func consumeWheelTick(timestamp: TimeInterval) -> Bool {
+    func consumeScroll(vertical: Bool, horizontal: Bool, shifted: Bool, timestamp: TimeInterval) -> ScrollInputMatcher.Match {
         lock.lock(); defer { lock.unlock() }
-        guard let tick = lastWheelTick else { return false }
-        guard abs(timestamp - tick) <= InputEdgeMatcher.correlationWindow else { return false }
-        lastWheelTick = nil
-        return true
+        return scrollMatcher.consume(vertical: vertical, horizontal: horizontal, shifted: shifted, timestamp: timestamp)
     }
 
     private func identity(_ device: IOHIDDevice) -> String { String(describing: Unmanaged.passUnretained(device).toOpaque()) }
@@ -143,7 +146,7 @@ final class HIDListener {
 
     private func disconnected(_ device: IOHIDDevice) {
         guard devices.removeValue(forKey: identity(device)) != nil else { return }
-        lock.lock(); rawState.reset(); heldButtons.removeAll(); lock.unlock()
+        lock.lock(); rawState.reset(); heldButtons.removeAll(); nativeKeysHeld.removeAll(); lock.unlock()
         valueStates.removeAll(); resetCorrelation()
         let remaining = devices.values.first
         publish {
@@ -158,15 +161,26 @@ final class HIDListener {
         guard supported(device) else { return }
         let page = IOHIDElementGetUsagePage(element), usage = IOHIDElementGetUsage(element)
         let integer = IOHIDValueGetIntegerValue(value)
-        // Issue 7: the vertical wheel is Generic Desktop Wheel, not a button.
-        // Record it so the event tap can prove a scroll event came from the
-        // Naga before scaling it.
-        if page == 1 && usage == 0x38 && integer != 0 {
-            var info = mach_timebase_info_data_t()
-            mach_timebase_info(&info)
-            let timestamp = Double(IOHIDValueGetTimeStamp(value)) * Double(info.numer) / Double(info.denom) / 1_000_000_000
-            recordWheelTick(timestamp: timestamp)
-            return
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        let timestamp = Double(IOHIDValueGetTimeStamp(value)) * Double(info.numer) / Double(info.denom) / 1_000_000_000
+        if let axis = NagaInput.scrollAxis(page: page, usage: usage, value: integer) {
+            let tiltButton = NagaInput.button(page: page, usage: usage, value: integer)
+            lock.lock()
+            scrollMatcher.record(axis: axis, button: tiltButton, timestamp: timestamp)
+            lock.unlock()
+            if axis == .vertical { return }
+        }
+        if page == 0x07, HIDKeyboardUsage.keyCode(forUsage: usage) != nil {
+            let down = integer != 0
+            let nativeKey = "\(identity(device))-native-\(usage)"
+            if valueStates[nativeKey, default: false] != down {
+                valueStates[nativeKey] = down
+                lock.lock()
+                nativeKeyMatcher.record(button: Int(usage), down: down, timestamp: timestamp)
+                if down { nativeKeysHeld.insert(usage) } else { nativeKeysHeld.remove(usage) }
+                lock.unlock()
+            }
         }
         let rawTilt = usesRawTiltDecoding &&
             (IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int) == 0x00b4 &&
@@ -179,9 +193,6 @@ final class HIDListener {
             guard valueStates[key, default: false] != down else { return }
             valueStates[key] = down
         }
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        let timestamp = Double(IOHIDValueGetTimeStamp(value)) * Double(info.numer) / Double(info.denom) / 1_000_000_000
         lock.lock()
         matcher.record(button: button, down: down, timestamp: timestamp)
         if !pan { if down { heldButtons.insert(button) } else { heldButtons.remove(button) } }
@@ -191,7 +202,7 @@ final class HIDListener {
             if down { NotificationCenter.default.post(name: Notification.Name("NagaButtonActivity"), object: self, userInfo: ["buttonIndex": button]) }
             // Release outputs even if the system key-up was not correlated in time.
             if !down && !(self.usesRawTiltDecoding && (15...16).contains(button)) {
-                ButtonMapper.shared.handleRelease(buttonIndex: button)
+                ButtonMapper.shared.handleRelease(buttonIndex: button, inputFlags: CGEventSource.flagsState(.combinedSessionState))
             }
         }
     }
@@ -200,7 +211,7 @@ final class HIDListener {
         lock.lock()
         let changed = driverModeEnabled != enabled
         driverModeEnabled = enabled
-        if changed { rawState.reset(); matcher.reset() }
+        if changed { rawState.reset(); matcher.reset(); scrollMatcher.reset() }
         lock.unlock()
         if changed { EventTapManager.shared.resetInputState() }
     }
@@ -232,12 +243,16 @@ final class HIDListener {
         lock.unlock()
         guard !changes.released.isEmpty || !changes.pressed.isEmpty else { return }
         publishInput {
-            for button in changes.released { ButtonMapper.shared.handleRelease(buttonIndex: button) }
+            for button in changes.released {
+                ButtonMapper.shared.handleRelease(buttonIndex: button, inputFlags: CGEventSource.flagsState(.combinedSessionState))
+            }
             for button in changes.pressed {
                 self.lastInputDescription = "Button \(button): recognized driver report"
                 NotificationCenter.default.post(name: Notification.Name("NagaButtonActivity"), object: self, userInfo: ["buttonIndex": button])
                 if EventTapManager.shared.isRunning && EventTapManager.shared.isRemappingEnabled {
-                    ButtonMapper.shared.handlePress(buttonIndex: button)
+                    // Driver reports carry no event flags, so sample the
+                    // modifiers the user is holding when the press arrives.
+                    ButtonMapper.shared.handlePress(buttonIndex: button, inputFlags: CGEventSource.flagsState(.combinedSessionState))
                 }
             }
         }

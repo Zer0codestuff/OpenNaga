@@ -28,6 +28,13 @@ enum NagaInput {
         return nil
     }
 
+    static func scrollAxis(page: UInt32, usage: UInt32, value: Int) -> ScrollAxis? {
+        guard value != 0 else { return nil }
+        if page == 0x01 && usage == 0x38 { return .vertical }
+        if page == 0x0c && usage == 0x238 { return .horizontal }
+        return nil
+    }
+
     /// Published protocol facts, not a hardware-validated capture:
     /// https://github.com/openrazer/openrazer/pull/2850
     /// Keyboard-interface driver report is exactly 16 bytes, report ID 04,
@@ -88,8 +95,7 @@ struct InputEdgeMatcher {
         let down: Bool
         let timestamp: TimeInterval
     }
-    static let correlationWindow: TimeInterval = 0.025
-    var window: TimeInterval = InputEdgeMatcher.correlationWindow
+    var window: TimeInterval = 0.025
     private var edges: [Edge] = []
 
     mutating func record(button: Int, down: Bool, timestamp: TimeInterval) {

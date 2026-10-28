@@ -1,6 +1,5 @@
 import Foundation
 import Cocoa
-import Carbon.HIToolbox
 import IOKit.hid
 
 enum InputEngineTests {
@@ -96,6 +95,7 @@ enum InputEngineTests {
 
         var events: [CGEvent] = []
         let mapper = ButtonMapper(eventSink: { events.append($0) })
+        mapper.modifierKeyState = { _ in false }
         mapper.frontmostBundleIdentifier = { "com.apple.TextEdit" }
         mapper.updateMapping([1: .mouse(action: .button4, description: nil), 2: .disabled])
         mapper.handlePress(buttonIndex: 1)
@@ -116,24 +116,37 @@ enum InputEngineTests {
         try check(events.last?.type == .leftMouseUp, "Mapping change releases hold")
         try check(mapper.dragEvent(for: move) == nil, "No stale drag after reset")
         mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd"])], description: nil)])
+        events.removeAll()
         mapper.handlePress(buttonIndex: 1)
+        try check(events.suffix(2).map(\.type) == [.flagsChanged, .keyDown], "Held shortcut presses its modifiers first")
+        try check(events.last?.flags == .maskCommand, "Held key carries the modifier flags")
         mapper.releaseAll()
-        try check(events.suffix(2).map(\.type) == [.keyUp, .flagsChanged] && events.last?.flags == [], "Cleanup releases held key, then its modifier")
+        try check(events.suffix(2).map(\.type) == [.keyUp, .flagsChanged], "Cleanup releases held key and its modifiers")
+        try check(events.last?.flags == [], "Released modifiers leave no flags behind")
         try check(events.allSatisfy { $0.getIntegerValueField(.eventSourceUserData) == ButtonMapper.syntheticMarker }, "Every emitted event is tagged")
-        // A held stroke with modifiers presses the real modifier keys around the key.
+
+        // Regression for issue 6: modifiers must arrive as real key events,
+        // not only as flags on an orphan keyDown.
         events.removeAll()
-        mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd"])], description: nil)])
-        mapper.handlePress(buttonIndex: 1)
-        try check(events.count == 2 && events[0].type == .flagsChanged && events[0].getIntegerValueField(.keyboardEventKeycode) == Int64(kVK_Command) && events[0].flags == .maskCommand, "Held stroke presses Command first")
-        try check(events[1].type == .keyDown && events[1].getIntegerValueField(.keyboardEventKeycode) == Int64(kVK_ANSI_C) && events[1].flags == .maskCommand, "Held stroke keyDown carries Command")
-        mapper.handleRelease(buttonIndex: 1)
-        try check(events.count == 4 && events[2].type == .keyUp && events[2].flags == .maskCommand, "Held stroke releases the key first")
-        try check(events[3].type == .flagsChanged && events[3].getIntegerValueField(.keyboardEventKeycode) == Int64(kVK_Command) && events[3].flags == [], "Held stroke releases Command last")
-        // A stroke without modifiers emits no flagsChanged events.
-        events.removeAll()
-        mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: [])], description: nil)])
+        mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd", "shift"])], description: nil)])
         mapper.handle(buttonIndex: 1)
-        try check(events.count == 2 && events.allSatisfy { $0.type != .flagsChanged }, "Plain stroke emits no modifier events")
+        try check(events.map(\.type) == [.flagsChanged, .flagsChanged, .keyDown, .keyUp, .flagsChanged, .flagsChanged], "One-shot shortcut wraps the key in modifier edges")
+        try check(events[2].flags == [.maskCommand, .maskShift] && events[3].flags == [.maskCommand, .maskShift], "Key edges carry the requested modifiers")
+        try check(events.last?.flags == [], "Modifier edges end with a clean flag state")
+        events.removeAll()
+        mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd"]), KeyStroke(key: "v", modifiers: ["cmd"])], description: nil)])
+        mapper.handle(buttonIndex: 1)
+        try check(events.count == 8 && events[0].type == .flagsChanged && events[4].type == .flagsChanged, "Sequence steps press and release their own modifiers")
+        events.removeAll()
+        mapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd"])], description: nil),
+                              2: .keySequence(keys: [KeyStroke(key: "v", modifiers: ["cmd"])], description: nil)])
+        mapper.handlePress(buttonIndex: 1)
+        mapper.handlePress(buttonIndex: 2)
+        try check(events.count == 3, "A second hold reuses the modifier already down")
+        mapper.handleRelease(buttonIndex: 1)
+        try check(events.count == 4 && events.last?.type == .keyUp, "Releasing one hold keeps the shared modifier down")
+        mapper.handleRelease(buttonIndex: 2)
+        try check(events.count == 6 && events.last?.type == .flagsChanged && events.last?.flags == [], "The last release lets the shared modifier go")
         for action in [MouseAction.button5, .middleClick, .rightClick, .scrollUp, .scrollDown, .scrollLeft, .scrollRight] {
             mapper.updateMapping([1: .mouse(action: action, description: nil)])
             let before = events.count
@@ -205,34 +218,18 @@ enum InputEngineTests {
         try check(KeyboardKeyGroup.allCases.allSatisfy { group in catalog.contains { $0.group == group } }, "Every key group is populated")
         var selectedKeyEvents: [CGEvent] = []
         let selectedKeyMapper = ButtonMapper(eventSink: { selectedKeyEvents.append($0) })
+        selectedKeyMapper.modifierKeyState = { _ in false }
         for entry in catalog {
             selectedKeyEvents.removeAll()
             let stroke = entry.stroke(modifiers: ["cmd", "shift"])
             selectedKeyMapper.updateMapping([1: .keySequence(keys: [stroke], description: nil)])
             selectedKeyMapper.handlePress(buttonIndex: 1)
-            try check(selectedKeyEvents.count == 3 &&
-                      selectedKeyEvents[0].type == .flagsChanged && selectedKeyEvents[0].flags == .maskCommand &&
-                      selectedKeyEvents[1].type == .flagsChanged && selectedKeyEvents[1].flags == [.maskCommand, .maskShift] &&
-                      selectedKeyEvents[2].type == .keyDown &&
+            try check(selectedKeyEvents.count == 3 && selectedKeyEvents[2].type == .keyDown &&
                       selectedKeyEvents[2].getIntegerValueField(.keyboardEventKeycode) == Int64(entry.code) &&
-                      selectedKeyEvents[2].flags == [.maskCommand, .maskShift], "Picker key press: \(entry.key)")
+                      selectedKeyEvents[2].flags.contains([.maskCommand, .maskShift]), "Picker key press: \(entry.key)")
             selectedKeyMapper.handleRelease(buttonIndex: 1)
-            try check(selectedKeyEvents.count == 6 && selectedKeyEvents[3].type == .keyUp &&
-                      selectedKeyEvents[4].type == .flagsChanged && selectedKeyEvents[4].flags == .maskCommand &&
-                      selectedKeyEvents[5].type == .flagsChanged && selectedKeyEvents[5].flags == [], "Picker key release: \(entry.key)")
+            try check(selectedKeyEvents.count == 6 && selectedKeyEvents[3].type == .keyUp, "Picker key release: \(entry.key)")
         }
-        // Each step of a sequence presses and releases its own modifiers, so a
-        // step never inherits modifiers from the previous one.
-        selectedKeyEvents.removeAll()
-        selectedKeyMapper.updateMapping([1: .keySequence(keys: [KeyStroke(key: "c", modifiers: ["cmd"], keyCode: 8), KeyStroke(key: "v", modifiers: ["cmd", "shift"], keyCode: 9), KeyStroke(key: "tab", modifiers: [], keyCode: 48)], description: nil)])
-        selectedKeyMapper.handle(buttonIndex: 1)
-        try check(selectedKeyEvents.map(\.type) == [.flagsChanged, .keyDown, .keyUp, .flagsChanged,
-                                                    .flagsChanged, .flagsChanged, .keyDown, .keyUp, .flagsChanged, .flagsChanged,
-                                                    .keyDown, .keyUp], "Sequence steps wrap their keys in their own modifiers")
-        try check(selectedKeyEvents[1].flags == .maskCommand && selectedKeyEvents[3].flags == [], "First step releases Command")
-        try check(selectedKeyEvents[5].flags == [.maskCommand, .maskShift] && selectedKeyEvents[6].flags == [.maskCommand, .maskShift], "Second step holds Command and Shift")
-        try check(selectedKeyEvents[8].flags == .maskCommand && selectedKeyEvents[9].flags == [], "Shift is released before Command")
-        try check(selectedKeyEvents[10].flags == [] && selectedKeyEvents[11].flags == [], "Plain step carries no modifiers")
         for (audio, expectedCode) in [(AudioAction.volumeUp, 0), (.volumeDown, 1), (.mute, 7)] {
             selectedKeyEvents.removeAll()
             let action = ActionType.audio(action: audio, description: "Audio test")
