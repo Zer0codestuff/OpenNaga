@@ -6,6 +6,9 @@ struct SensitivityPane: View {
     @State private var dpiX = ""
     @State private var dpiY = ""
     @State private var rate = 1000
+    @State private var scrollVertical = ScrollSensitivity.baseline.vertical
+    @State private var scrollHorizontal = ScrollSensitivity.baseline.horizontal
+    @State private var scrollSensitivityStored = ScrollSensitivity.baseline
     @State private var editedDPI = false
     @State private var editedRate = false
     private var device: RazerDeviceController { .shared }
@@ -20,7 +23,7 @@ struct SensitivityPane: View {
             VStack(alignment: .leading, spacing: 24) {
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Sensitivity").font(.title2.weight(.semibold))
+                        Text("Sensor sensitivity").font(.title2.weight(.semibold))
                         Text("Hardware settings change only when you apply them.")
                             .foregroundStyle(.secondary)
                     }
@@ -75,16 +78,23 @@ struct SensitivityPane: View {
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 GroupBox {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("Scroll sensitivity").font(.headline)
+                            Text("Scroll wheel").font(.headline)
                             Spacer()
-                            Button("Reset") { ConfigManager.shared.setScrollSensitivity(.baseline) }
-                                .disabled(ConfigManager.shared.scrollSensitivity == .baseline)
+                            Button("Reset") {
+                                ConfigManager.shared.resetScrollSensitivity()
+                                scrollVertical = ScrollSensitivity.baseline.vertical
+                                scrollHorizontal = ScrollSensitivity.baseline.horizontal
+                                scrollSensitivityStored = ScrollSensitivity.baseline
+                            }
+                                .controlSize(.small)
                         }
-                        scrollSlider("Vertical wheel", axis: .vertical)
-                        scrollSlider("Horizontal / wheel tilt", axis: .horizontal)
-                        Text("Applies to the Naga's wheel, tilt and assigned scroll actions while OpenNaga is running with remapping enabled. These settings are not saved to the mouse.")
+                        Text("Software multipliers for this mouse's wheel. They apply while OpenNaga runs and never change the hardware.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        scrollSlider("Vertical scroll", value: $scrollVertical)
+                        scrollSlider("Side scroll (wheel tilt)", value: $scrollHorizontal)
+                        Text("Below 1.0 scrolls slower, above 1.0 faster. Side scroll also affects tilt assigned to an action. Trackpads and other mice are not affected.")
                             .font(.caption).foregroundStyle(.secondary)
                     }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -121,32 +131,30 @@ struct SensitivityPane: View {
             dpiY = device.dpiY.map(String.init) ?? ""
         }
         if !editedRate, let value = device.pollingRate, [125, 500, 1000].contains(value) { rate = value }
+        // Adopt external changes (Reset button, another window) without
+        // fighting an in-progress drag: only follow the stored value when the
+        // sliders are not ahead of it.
+        let stored = ConfigManager.shared.scrollSensitivity
+        if stored != scrollSensitivityStored, scrollVertical != scrollSensitivityStored.vertical,
+           scrollHorizontal != scrollSensitivityStored.horizontal {
+            scrollVertical = stored.vertical
+            scrollHorizontal = stored.horizontal
+        }
+        scrollSensitivityStored = stored
     }
 
-    private func scrollSlider(_ title: String, axis: ScrollAxis) -> some View {
-        let config = ConfigManager.shared
-        let binding = Binding<Double>(
-            get: { axis == .vertical ? config.scrollSensitivity.vertical : config.scrollSensitivity.horizontal },
-            set: { value in
-                var sensitivity = config.scrollSensitivity
-                if axis == .vertical { sensitivity.vertical = value } else { sensitivity.horizontal = value }
-                config.setScrollSensitivity(sensitivity)
-            }
-        )
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text("\(binding.wrappedValue, specifier: "%.1f")×")
-                    .monospacedDigit().foregroundStyle(.secondary)
-            }
-            Slider(value: binding, in: ScrollSensitivity.range, step: 0.1)
-                .accessibilityLabel(title)
-            HStack {
-                Text("Slower")
-                Spacer()
-                Text("Faster")
-            }.font(.caption).foregroundStyle(.secondary)
+    private func storeScrollSensitivity() {
+        scrollSensitivityStored = ScrollSensitivity(vertical: scrollVertical, horizontal: scrollHorizontal)
+        ConfigManager.shared.scrollSensitivity = scrollSensitivityStored
+    }
+
+    private func scrollSlider(_ title: String, value: Binding<Double>) -> some View {
+        HStack(spacing: 12) {
+            Text(title).frame(width: 190, alignment: .leading)
+            Slider(value: value, in: ScrollSensitivity.range, step: 0.1)
+                .onChange(of: value.wrappedValue) { _ in storeScrollSensitivity() }
+            Text(String(format: "%.1fx", value.wrappedValue))
+                .monospacedDigit().frame(width: 44, alignment: .trailing)
         }
     }
 }
@@ -192,9 +200,7 @@ struct StatusPane: View {
                         Image(systemName: "menubar.rectangle").font(.title2).foregroundStyle(UIStyle.accent)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Keeps running in the background").font(.headline)
-                            Text(model.onboardActive ? (model.onboardName == nil ? "The last save is incomplete. Restore the previous assignments from Mouse Memory." : "The profile saved in the mouse keeps working after Quit. To go back to software remapping, restore the previous assignments from Mouse Memory.")
-                                 : model.onboardOnly ? "This profile was imported from the mouse. Edit it and use Save to Mouse to apply changes. Software remapping is paused because custom firmware assignments cannot identify physical controls reliably."
-                                 : "Close the window to keep OpenNaga in the menu bar. Your assignments keep working in other apps. To stop the service, turn off Remapping or choose Quit.")
+                            Text(model.onboardActive ? (model.onboardName == nil ? "The last save is incomplete. Restore the previous assignments from Mouse Memory." : "The profile saved in the mouse keeps working after Quit. To go back to software remapping, restore the previous assignments from Mouse Memory.") : "Close the window to keep OpenNaga in the menu bar. Your assignments keep working in other apps. To stop the service, turn off Remapping or choose Quit.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
