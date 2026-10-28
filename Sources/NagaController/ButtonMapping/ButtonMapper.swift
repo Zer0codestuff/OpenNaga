@@ -10,6 +10,18 @@ final class ButtonMapper {
     private var activeHolds: [Int: Hold] = [:]
     private var pressed: Set<Int> = []
     private var generation = 0
+    // Modifier bits this mapper injected with flagsChanged events. Many apps read
+    // the global modifier state instead of the flags on a key event, so strokes
+    // with modifiers press and release the real modifier keys around the key.
+    private var injectedModifiers: CGEventFlags = []
+    // Fixed press order; releases walk it backwards.
+    private static let modifierKeyCodes: [(CGEventFlags, CGKeyCode)] = [
+        (.maskCommand, CGKeyCode(kVK_Command)),
+        (.maskControl, CGKeyCode(kVK_Control)),
+        (.maskShift, CGKeyCode(kVK_Shift)),
+        (.maskAlternate, CGKeyCode(kVK_Option)),
+        (.maskSecondaryFn, CGKeyCode(kVK_Function))
+    ]
     private let eventSink: ((CGEvent) -> Void)?
     private let workspaceActionSink: ((SystemAction) -> Void)?
     var systemShortcutPreferences: () -> [String: Any] = MacSystemShortcut.preferences
@@ -34,6 +46,7 @@ final class ButtonMapper {
         generation += 1
         for button in Array(activeHolds.keys) { handleRelease(buttonIndex: button) }
         pressed.removeAll()
+        releaseInjectedModifiers()
     }
 
     func handle(buttonIndex: Int) {
@@ -48,6 +61,7 @@ final class ButtonMapper {
             if let code = effectiveKeyCode(for: keys[0]) {
                 let flags = modifierFlags(from: keys[0].modifiers)
                 activeHolds[buttonIndex] = .key(code, flags)
+                pressModifiers(flags)
                 postKey(code, flags: flags, down: true)
             }
         case .mouse(let action, _):
@@ -70,6 +84,8 @@ final class ButtonMapper {
             if !activeHolds.values.contains(where: { if case .key(let c, _) = $0 { return c == code }; return false }) {
                 postKey(code, flags: flags, down: false)
             }
+            // Another hold may still need a modifier this hold injected.
+            releaseModifiers()
         case .mouse(let button):
             if !activeHolds.values.contains(where: { if case .mouse(let b) = $0 { return b == button }; return false }) {
                 postMouse(button, down: false)
@@ -116,15 +132,12 @@ final class ButtonMapper {
             guard let stroke = shortcut.resolve(in: systemShortcutPreferences()) else {
                 return action.shortcutSetupMessage
             }
+            // The modifiers go down as real flagsChanged events so the global
+            // modifier state matches the stroke, then release in reverse order.
+            pressModifiers(stroke.flags)
             postKey(stroke.keyCode, flags: stroke.flags, down: true)
             postKey(stroke.keyCode, flags: stroke.flags, down: false)
-            if action == .switchApplication {
-                // Command-Tab must release Command or the app switcher remains open.
-                let release = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(kVK_Command), keyDown: false)
-                release?.type = .flagsChanged
-                release?.flags = []
-                post(release)
-            }
+            releaseModifiers()
         } else if let workspaceActionSink {
             workspaceActionSink(action)
         } else {
@@ -153,11 +166,52 @@ final class ButtonMapper {
         post(event)
     }
 
+    /// Presses the modifiers of `flags` with real flagsChanged events so the
+    /// global modifier state matches the stroke. Many apps read that state
+    /// instead of the flags on a key event. Already injected modifiers stay down.
+    private func pressModifiers(_ flags: CGEventFlags) {
+        for (mask, code) in Self.modifierKeyCodes where flags.contains(mask) && !injectedModifiers.contains(mask) {
+            injectedModifiers.insert(mask)
+            postFlagsChanged(code, flags: injectedModifiers, down: true)
+        }
+    }
+
+    /// Releases injected modifiers that no active key hold needs anymore.
+    /// The user's own physical modifiers are never touched.
+    private func releaseModifiers() {
+        var stillNeeded: CGEventFlags = []
+        for hold in activeHolds.values {
+            if case .key(_, let holdFlags) = hold { stillNeeded.formUnion(holdFlags) }
+        }
+        for (mask, code) in Self.modifierKeyCodes.reversed()
+        where injectedModifiers.contains(mask) && !stillNeeded.contains(mask) {
+            injectedModifiers.remove(mask)
+            postFlagsChanged(code, flags: injectedModifiers, down: false)
+        }
+    }
+
+    private func releaseInjectedModifiers() {
+        for (mask, code) in Self.modifierKeyCodes.reversed() where injectedModifiers.contains(mask) {
+            injectedModifiers.remove(mask)
+            postFlagsChanged(code, flags: injectedModifiers, down: false)
+        }
+    }
+
+    /// A flagsChanged event carries the full modifier state after the change.
+    private func postFlagsChanged(_ code: CGKeyCode, flags: CGEventFlags, down: Bool) {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)
+        event?.type = .flagsChanged
+        event?.flags = flags
+        post(event)
+    }
+
     private func sendKeyStroke(_ stroke: KeyStroke) {
         guard let code = effectiveKeyCode(for: stroke) else { return }
         let flags = modifierFlags(from: stroke.modifiers)
+        pressModifiers(flags)
         postKey(code, flags: flags, down: true)
         postKey(code, flags: flags, down: false)
+        releaseModifiers()
     }
 
     private func mouseButton(_ action: MouseAction) -> CGMouseButton? {
@@ -193,13 +247,8 @@ final class ButtonMapper {
                 if let stroke = KeyboardLayoutShortcut.browserStroke(for: action) { self.sendKeyStroke(stroke) }
             }
         case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
-            // Issue 7: synthetic scroll follows the user's sensitivity, so a
-            // tilt assigned to side scroll respects the horizontal slider.
-            let sensitivity = ConfigManager.shared.scrollSensitivity
-            let vertical: Int32 = action == .scrollUp ? ScrollSensitivity.scaledLine(3, factor: sensitivity.vertical)
-                                  : action == .scrollDown ? -ScrollSensitivity.scaledLine(3, factor: sensitivity.vertical) : 0
-            let horizontal: Int32 = action == .scrollLeft ? ScrollSensitivity.scaledLine(3, factor: sensitivity.horizontal)
-                                   : action == .scrollRight ? -ScrollSensitivity.scaledLine(3, factor: sensitivity.horizontal) : 0
+            let vertical: Int32 = action == .scrollUp ? 3 : action == .scrollDown ? -3 : 0
+            let horizontal: Int32 = action == .scrollLeft ? 3 : action == .scrollRight ? -3 : 0
             post(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: vertical, wheel2: horizontal, wheel3: 0))
         default: break
         }
