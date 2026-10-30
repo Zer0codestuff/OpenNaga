@@ -96,6 +96,45 @@ enum InputEngineTests {
         edges.reset()
         try check(!edges.consume(button: 6, down: true, timestamp: 33), "Reset clears recorded edges")
 
+        // A delayed batch preserves each control and direction independently.
+        var batch = InputEdgeMatcher()
+        for button in 1...12 {
+            batch.record(button: button, down: true, timestamp: 40 + Double(button) * 0.01)
+            batch.record(button: button, down: false, timestamp: 40.2 + Double(button) * 0.01)
+        }
+        for button in 1...12 {
+            try check(batch.consume(button: button, down: true, timestamp: 40 + Double(button) * 0.01), "Delayed batch retains press \(button)")
+            try check(batch.consume(button: button, down: false, timestamp: 40.2 + Double(button) * 0.01), "Delayed batch retains release \(button)")
+        }
+        var bounded = InputEdgeMatcher()
+        for button in 1...129 { bounded.record(button: button, down: true, timestamp: 50) }
+        try check(!bounded.consume(button: 1, down: true, timestamp: 50), "The oldest edge is discarded at the 128-edge capacity")
+        try check(bounded.consume(button: 2, down: true, timestamp: 50), "Capacity pruning preserves the next edge")
+        try check(bounded.consume(button: 129, down: true, timestamp: 50), "Capacity pruning preserves the newest edge")
+        var narrow = InputEdgeMatcher()
+        narrow.record(button: 1, down: true, timestamp: 60)
+        try check(!narrow.consume(button: 1, down: true, timestamp: 60.026), "Longer retention does not widen the 25 ms match window")
+        try check(narrow.consume(button: 1, down: true, timestamp: 59.976), "An earlier event timestamp within the match window still matches")
+        try check(!narrow.consume(button: 1, down: true, timestamp: 60), "A retained edge still has a single owner")
+
+        // Separate producers contend on the same store. Each lane uses its own
+        // control so contention cannot legitimately consume another lane's edge.
+        let concurrent = CorrelatedEdges()
+        let resultLock = NSLock()
+        var failedLanes = 0
+        DispatchQueue.concurrentPerform(iterations: 8) { lane in
+            var failed = false
+            for _ in 0..<1_000 {
+                concurrent.record(button: lane, down: true, timestamp: 70)
+                if !concurrent.consume(button: lane, down: true, timestamp: 70)
+                    || concurrent.consume(button: lane, down: true, timestamp: 70) { failed = true }
+            }
+            resultLock.lock()
+            if failed { failedLanes += 1 }
+            resultLock.unlock()
+        }
+        try check(failedLanes == 0, "Concurrent record and consume preserve exactly-once ownership across 8,000 edges")
+
         // Fixtures reconstructed from published PR2850 protocol facts, not device captures.
         let held: [UInt8] = [4, 0x20, 0x21, 0x22, 0x23] + Array(repeating: 0, count: 11)
         try check(NagaInput.driverButtons(report: held) == Set([13, 14, 15, 16]), "Driver held set")

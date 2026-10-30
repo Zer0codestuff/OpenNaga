@@ -82,9 +82,8 @@ final class HIDListener {
             }
         }
         worker.name = "Naga HID input"
-        // A game can keep every core busy. This thread must record a press at
-        // least as promptly as the event tap handles it, so it runs at the same
-        // priority as the main thread's remapping activity.
+        // Keep HID observation responsive under CPU load. Scheduling still
+        // cannot guarantee that an HID callback runs before the event tap.
         worker.qualityOfService = .userInteractive
         thread = worker
         worker.start()
@@ -199,7 +198,7 @@ final class HIDListener {
         lock.lock()
         if !pan { if down { heldButtons.insert(button) } else { heldButtons.remove(button) } }
         lock.unlock()
-        // Last, so a consumer woken by this edge already sees the held state.
+        // Publish the edge only after updating the held state.
         matcher.record(button: button, down: down, timestamp: timestamp)
         publishInput {
             self.lastInputDescription = "Button \(button): \(down ? "pressed" : "released")"

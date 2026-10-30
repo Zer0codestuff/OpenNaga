@@ -123,8 +123,8 @@ struct InputEdgeMatcher {
 }
 
 /// Edges recorded on the HID thread and consumed by the event tap, which run
-/// on different threads. Consuming never waits: the tap is blocking, so any
-/// wait there stalls every mouse event behind it.
+/// on different threads. The lock protects only bounded matcher operations;
+/// a missing edge returns without waiting or retrying for more HID evidence.
 final class CorrelatedEdges {
     private let lock = NSLock()
     private var matcher = InputEdgeMatcher()
