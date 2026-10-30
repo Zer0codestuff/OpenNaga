@@ -89,6 +89,11 @@ struct InputRepeatOwnership {
 
 /// Both timestamps use monotonic seconds since boot. A matching edge is removed,
 /// even when the caller elects to leave an unmapped input untouched.
+///
+/// An edge matches an event whose timestamp is within `window` of it. Both are
+/// hardware timestamps, not the time a callback ran, so a callback that runs
+/// late still matches. The edge must therefore outlive that delay: it is kept
+/// for `retention`, measured from the newest timestamp seen, not for `window`.
 struct InputEdgeMatcher {
     struct Edge {
         let button: Int
@@ -96,16 +101,17 @@ struct InputEdgeMatcher {
         let timestamp: TimeInterval
     }
     var window: TimeInterval = 0.025
+    var retention: TimeInterval = 1
     private var edges: [Edge] = []
 
     mutating func record(button: Int, down: Bool, timestamp: TimeInterval) {
-        edges.removeAll { timestamp - $0.timestamp > window }
+        edges.removeAll { timestamp - $0.timestamp > retention }
         edges.append(Edge(button: button, down: down, timestamp: timestamp))
         if edges.count > 128 { edges.removeFirst(edges.count - 128) }
     }
 
     mutating func consume(button: Int, down: Bool, timestamp: TimeInterval) -> Bool {
-        edges.removeAll { timestamp - $0.timestamp > window }
+        edges.removeAll { timestamp - $0.timestamp > retention }
         guard let index = edges.firstIndex(where: {
             $0.button == button && $0.down == down && abs(timestamp - $0.timestamp) <= window
         }) else { return false }
@@ -114,4 +120,27 @@ struct InputEdgeMatcher {
     }
 
     mutating func reset() { edges.removeAll() }
+}
+
+/// Edges recorded on the HID thread and consumed by the event tap, which run
+/// on different threads. The lock protects only bounded matcher operations;
+/// a missing edge returns without waiting or retrying for more HID evidence.
+final class CorrelatedEdges {
+    private let lock = NSLock()
+    private var matcher = InputEdgeMatcher()
+
+    func record(button: Int, down: Bool, timestamp: TimeInterval) {
+        lock.lock(); defer { lock.unlock() }
+        matcher.record(button: button, down: down, timestamp: timestamp)
+    }
+
+    func consume(button: Int, down: Bool, timestamp: TimeInterval) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return matcher.consume(button: button, down: down, timestamp: timestamp)
+    }
+
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        matcher.reset()
+    }
 }
