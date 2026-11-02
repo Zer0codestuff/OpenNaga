@@ -9,6 +9,7 @@ private enum EditorKind: String, CaseIterable {
     case application = "Application"
     case profile = "Switch profile"
     case shell = "Shell command"
+    case text = "Text"
     case macro = "Macro"
     case hypershift = "Hypershift key"
     case disabled = "Disabled"
@@ -19,7 +20,6 @@ struct ActionInspector: View {
     @ObservedObject private var model = WorkspaceModel.shared
     @State private var kind: EditorKind = .original
     @State private var text = ""
-    @State private var legacyText: String?
     @State private var description = ""
     @State private var keys: [KeyStroke] = []
     @State private var selectedStroke = 0
@@ -28,6 +28,7 @@ struct ActionInspector: View {
     @State private var systemShortcuts: [String: Any] = [:]
     @State private var recording = false
     @State private var validationError: String?
+    @State private var macroSteps: [MacroStep] = []
 
     private var layer: MappingLayer { model.layer }
     private var current: ActionType? { model.action(for: button, layer: layer) }
@@ -78,6 +79,7 @@ struct ActionInspector: View {
             Spacer(minLength: 12)
         }
         .textFieldStyle(.roundedBorder)
+        .disabled(model.profilesReadOnly)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { load() }
         .onChange(of: current) { _ in
@@ -157,16 +159,22 @@ struct ActionInspector: View {
                 Text("Choose a profile").tag("")
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
             }
+            if !text.isEmpty && !model.profiles.contains(text) {
+                Label("This target profile no longer exists. Choose another profile.", systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         case .shell:
             Text("The command runs when you press the button. Only use commands you trust.")
                 .font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $text).font(.system(.body, design: .monospaced)).frame(minHeight: 100)
             Button("Apply Command") { persist() }
         case .macro:
-            Text("JSON steps. The existing macro stays unchanged until you apply a valid version.")
-                .font(.callout).foregroundStyle(.secondary)
-            TextEditor(text: $text).font(.system(.body, design: .monospaced)).frame(minHeight: 230)
-            Button("Apply Macro") { persist() }
+            MacroEditor(steps: $macroSteps) { persist() }
+        case .text:
+            TextEditor(text: $text).font(.system(.body, design: .monospaced)).frame(minHeight: 120)
+            Text("Types text without changing the clipboard. Press again to restart; Stop Macros interrupts it.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Apply Text") { persist() }
         }
     }
 
@@ -209,10 +217,6 @@ struct ActionInspector: View {
 
     private var shortcutEditor: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if legacyText != nil {
-                Text("The previous text stays saved until you choose a key.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
             if keys.count > 1 {
                 Picker("Step", selection: $selectedStroke) {
                     ForEach(keys.indices, id: \.self) { index in
@@ -238,9 +242,10 @@ struct ActionInspector: View {
                 HStack(spacing: 6) {
                     ForEach(["ctrl", "alt", "shift", "cmd"], id: \.self) { modifier in
                         Toggle(modifierSymbol(modifier), isOn: Binding(
-                            get: { currentStroke?.modifiers.contains(modifier) ?? false },
+                            get: { currentStroke?.normalizedModifiers.contains(modifier) ?? false },
                             set: { enabled in
                                 guard keys.indices.contains(selectedStroke) else { return }
+                                keys[selectedStroke].modifiers = keys[selectedStroke].normalizedModifiers
                                 keys[selectedStroke].modifiers.removeAll { $0 == modifier }
                                 if enabled { keys[selectedStroke].modifiers.append(modifier) }
                                 persist()
@@ -301,8 +306,8 @@ struct ActionInspector: View {
         }
         recording = false
         kind = newKind
-        legacyText = nil
         text = newKind == .macro ? "[]" : ""
+        macroSteps = []
         keys = []
         selectedStroke = 0
         description = ""
@@ -311,7 +316,6 @@ struct ActionInspector: View {
     }
 
     private func load() {
-        legacyText = nil
         description = ""
         keys = []
         systemShortcuts = MacSystemShortcut.preferences()
@@ -325,15 +329,12 @@ struct ActionInspector: View {
         case .keySequence(let strokes, let label):
             kind = .keys; keys = strokes; description = label ?? ""
             selectedStroke = min(selectedStroke, max(0, keys.count - 1))
-        case .textSnippet(let value, let label): kind = .keys; legacyText = value; description = label ?? ""
+        case .textSnippet(let value, let label): kind = .text; text = value; description = label ?? ""
         case .application(let value, let label): kind = .application; text = value; description = label ?? ""
         case .profileSwitch(let value, let label): kind = .profile; text = value; description = label ?? ""
         case .systemCommand(let value, let label): kind = .shell; text = value; description = label ?? ""
         case .macro(let steps, let label):
-            kind = .macro; description = label ?? ""
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            text = (try? encoder.encode(steps)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            kind = .macro; description = label ?? ""; macroSteps = steps
         }
     }
 
@@ -355,18 +356,12 @@ struct ActionInspector: View {
             guard !shiftedLayer else { return }
             action = .hypershift(description: label)
         case .shell: action = .systemCommand(command: text, description: label)
+        case .text: action = .textSnippet(text: text, description: label)
         case .macro:
             do {
-                let steps = try JSONDecoder().decode([MacroStep].self, from: Data(text.utf8))
-                guard steps.allSatisfy({ ["key", "text", "delay"].contains($0.type) &&
-                    ($0.type != "key" || $0.keyStroke != nil) &&
-                    ($0.type != "text" || $0.text != nil) &&
-                    ($0.type != "delay" || ($0.delayMs ?? -1) >= 0) }) else {
-                    validationError = "Invalid steps: use key, text or delay with its value."
-                    return
-                }
-                action = .macro(steps: steps, description: label)
-            } catch { validationError = "Invalid JSON: \(error.localizedDescription)"; return }
+                try ProfileValidation.validateMacro(macroSteps)
+                action = .macro(steps: macroSteps, description: label)
+            } catch { validationError = error.localizedDescription; return }
         }
         model.save(action, button: button, layer: layer)
     }
@@ -377,7 +372,7 @@ private func modifierSymbol(_ value: String) -> String {
 }
 
 /// A local monitor exists only while the user explicitly arms this control.
-private struct ShortcutCapture: NSViewRepresentable {
+struct ShortcutCapture: NSViewRepresentable {
     @Binding var isRecording: Bool
     let onCapture: (KeyStroke) -> Void
 
@@ -390,7 +385,7 @@ private struct ShortcutCapture: NSViewRepresentable {
     static func dismantleNSView(_ nsView: CaptureButton, coordinator: ()) { nsView.setRecording(false) }
 }
 
-private final class CaptureButton: NSButton {
+final class CaptureButton: NSButton {
     var onCapture: ((KeyStroke) -> Void)?
     var onRecordingChange: ((Bool) -> Void)?
     private var monitor: Any?

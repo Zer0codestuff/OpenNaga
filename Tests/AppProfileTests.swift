@@ -171,7 +171,7 @@ enum AppProfileTests {
         let target = reload()
         target.setAppProfile(nil, forBundleIdentifier: "app.notes")
         try target.importProfiles(from: export)
-        try check(target.appProfiles["app.notes"] == "A", "Importing all profiles brings their app bindings")
+        try check(target.appProfiles["app.notes"] == "A 2", "Importing all profiles brings bindings to the uniquely named incoming profile")
     }
 
     private static func catalog(_ check: (Bool, String) throws -> Void) throws {

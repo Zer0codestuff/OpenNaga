@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class WorkspaceModel: ObservableObject {
     static let shared = WorkspaceModel()
+    static let restartInputNotification = Notification.Name("NagaRestartInputService")
     @Published var section: WorkspaceSection = .buttons
     @Published var profile = ""
     @Published var profiles: [String] = []
@@ -28,6 +29,10 @@ final class WorkspaceModel: ObservableObject {
     /// The profile whose mapping is live; differs from `profile` while an app binding applies.
     @Published var runtimeProfile = ""
     @Published var frontmostApp: String?
+    @Published var profilesReadOnly = false
+    @Published var canUndo = false
+    @Published var canRedo = false
+    @Published var activeMacros = 0
     private var subscriptions = Set<AnyCancellable>()
 
     private init() {
@@ -37,7 +42,7 @@ final class WorkspaceModel: ObservableObject {
             NSApplication.didBecomeActiveNotification,
             EventTapManager.didUpdateNotification,
             PermissionManager.didUpdateNotification,
-            AppProfileSwitcher.didUpdateNotification
+            AppProfileSwitcher.didUpdateNotification, ButtonMapper.didUpdateNotification
         ]
         for name in names {
             NotificationCenter.default.publisher(for: name)
@@ -63,7 +68,11 @@ final class WorkspaceModel: ObservableObject {
         profiles = config.availableProfiles()
         mapping = config.mappingForCurrentProfile()
         hypershiftMapping = config.mappingForCurrentProfile(layer: .hypershift)
-        error = config.lastError
+        error = config.lastError ?? ButtonMapper.shared.lastActionError
+        profilesReadOnly = config.profilesReadOnly
+        canUndo = config.canUndo
+        canRedo = config.canRedo
+        activeMacros = ButtonMapper.shared.activeMacroButtons.count
         deviceName = HIDListener.shared.connectedDeviceName ?? "No mouse detected"
         onboardActive = OnboardProfileStore.isActive
         onboardOnly = config.currentProfileIsOnboardOnly
@@ -81,6 +90,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     var serviceStatus: String {
+        if profilesReadOnly { return "Profiles need recovery" }
         if onboardActive { return "Mouse memory: \(onboardName ?? "restore needed")" }
         if onboardOnly { return "Imported profile: save to mouse" }
         if !remappingEnabled { return "Remapping paused" }
@@ -91,7 +101,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func setRemapping(_ value: Bool) {
-        guard !onboardActive, !onboardOnly, !RazerDeviceController.shared.isBusy else { return }
+        guard !profilesReadOnly, !onboardActive, !onboardOnly, !RazerDeviceController.shared.isBusy else { return }
         ConfigManager.shared.setRemappingEnabled(value)
         if permissionsGranted { EventTapManager.shared.isRemappingEnabled = value }
         refresh()
@@ -141,8 +151,55 @@ final class WorkspaceModel: ObservableObject {
         panel.allowedContentTypes = [.json]
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try ConfigManager.shared.importProfiles(from: url); refresh() }
+        do {
+            let config = ConfigManager.shared
+            let document = try ProfileImportDocument(url: url)
+            let matches = document.matchingNames(in: config.profiles)
+            let alert = NSAlert()
+            alert.messageText = "Import \(document.file.profiles.count) profiles?"
+            var detail = "Existing profiles and your current selection are preserved by default."
+            if !matches.isEmpty { detail += "\n\nMatching names: \(matches.prefix(6).joined(separator: ", "))\(matches.count > 6 ? " and more" : "")." }
+            if document.shellCommands > 0 {
+                detail += "\n\nContains \(document.shellCommands) shell \(document.shellCommands == 1 ? "command" : "commands"). Review their actions before using the imported profiles. Commands run with your account's access when a mapped button is pressed."
+            }
+            alert.informativeText = detail
+            alert.addButton(withTitle: matches.isEmpty ? "Import" : "Keep Both")
+            alert.addButton(withTitle: "Cancel")
+            if !matches.isEmpty { alert.addButton(withTitle: "Replace Matching…") }
+            let response = alert.runModal()
+            guard response != .alertSecondButtonReturn else { return }
+            let policy: ProfileImportPolicy = response == .alertThirdButtonReturn ? .replaceMatching : .keepBoth
+            if policy == .replaceMatching {
+                let replace = NSAlert()
+                replace.messageText = "Replace \(matches.count) matching profiles?"
+                replace.informativeText = "Their assignments will be replaced. Mouse-import protection is preserved. Undo Profile Change can restore the previous document."
+                replace.addButton(withTitle: "Replace"); replace.addButton(withTitle: "Cancel")
+                guard replace.runModal() == .alertFirstButtonReturn else { return }
+            }
+            try config.importProfiles(document, policy: policy)
+            refresh()
+        }
         catch { self.error = error.localizedDescription }
+    }
+
+    func undoProfileChange() { _ = ConfigManager.shared.undo(); refresh() }
+    func redoProfileChange() { _ = ConfigManager.shared.redo(); refresh() }
+    func reloadProfiles() { ConfigManager.shared.load(); refresh() }
+    func showProfilesFolder() { NSWorkspace.shared.open(ConfigManager.shared.profilesFolder) }
+    func cancelMacros() { ButtonMapper.shared.cancelMacros(); refresh() }
+    func restartInputService() {
+        guard permissionsGranted else { error = "Grant Accessibility and Input Monitoring before restarting input."; return }
+        guard !RazerDeviceController.shared.isBusy else { error = "Wait for the mouse operation to finish before restarting input."; return }
+        NotificationCenter.default.post(name: Self.restartInputNotification, object: nil)
+    }
+    func restoreProfileBackup() {
+        let alert = NSAlert()
+        alert.messageText = "Restore the previous profile save?"
+        alert.informativeText = "The current file will be preserved separately, including unreadable data. This restores local profiles only; mouse memory is unchanged."
+        alert.addButton(withTitle: "Restore Backup"); alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        _ = ConfigManager.shared.restoreProfileBackup()
+        refresh()
     }
 
     func exportProfiles() {

@@ -26,7 +26,11 @@ struct TestRunner {
             print("Hypershift layer: \(hypershift) checks passed")
             let appProfiles = try AppProfileTests.run()
             print("App profiles: \(appProfiles) checks passed")
-            print("PASS: \(core + system + modifiers + native + scroll + hardware + onboard + storage + imported + hypershift + appProfiles) checks")
+            let protection = try ProfileProtectionTests.run()
+            print("Profile protection: \(protection) checks passed")
+            let macroRunner = try MacroRunnerTests.run()
+            print("Macro execution: \(macroRunner) checks passed")
+            print("PASS: \(core + system + modifiers + native + scroll + hardware + onboard + storage + imported + hypershift + appProfiles + protection + macroRunner) checks")
         } catch {
             fputs("FAIL: \(error)\n", stderr)
             exit(1)

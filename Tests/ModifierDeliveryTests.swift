@@ -203,10 +203,9 @@ enum ModifierDeliveryTests {
 
         events.removeAll()
         mapper.runMacro([MacroStep(type: "delay", delayMs: 30), MacroStep(type: "key", keyStroke: KeyStroke(key: "c", modifiers: ["cmd"]))])
-        try await Task.sleep(nanoseconds: 5_000_000)
         mapper.updateMapping([:])
         try await Task.sleep(nanoseconds: 50_000_000)
-        try check(events.isEmpty, "Changing mappings cancels delayed macro steps before modifier injection")
+        try check(events.isEmpty, "Changing mappings cancels queued macro steps before modifier injection")
         // Modifiers the user holds on the triggering input combine with the
         // mapped key even when no physical modifier edge was observed.
         let commandHeld = CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | 0x08)

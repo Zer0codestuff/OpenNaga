@@ -176,6 +176,7 @@ struct StatusPane: View {
                                       open: permissions.openInputMonitoringPreferences)
                     }.padding(12)
                 }
+                ProfileRecoveryPane()
                 GroupBox {
                     VStack(alignment: .leading, spacing: 16) {
                         statusRow("Device", model.deviceName)
@@ -185,6 +186,13 @@ struct StatusPane: View {
                         statusRow("Input interception", EventTapManager.shared.isRunning ? "Running" : "Unavailable")
                         statusRow("Remapping", model.remappingActive ? "On" : "Off")
                         statusRow("Last input", HIDListener.shared.lastInputDescription)
+                        HStack {
+                            Text("Running macros: \(model.activeMacros)").foregroundStyle(.secondary)
+                            Button("Stop Macros", action: model.cancelMacros).disabled(model.activeMacros == 0)
+                            Spacer()
+                            Button("Restart Input Service", action: model.restartInputService)
+                                .disabled(!model.permissionsGranted || RazerDeviceController.shared.isBusy)
+                        }
                     }.padding(12)
                 }
                 GroupBox {
@@ -241,25 +249,25 @@ struct ProfileManagerPane: View {
             Text("Manage profiles").font(.title2.weight(.semibold))
             Picker("Current profile", selection: Binding(get: { model.profile }, set: model.selectProfile)) {
                 ForEach(model.profiles, id: \.self) { Text($0).tag($0) }
-            }
-            TextField("Profile name", text: $name).textFieldStyle(.roundedBorder)
+            }.disabled(model.profilesReadOnly)
+            TextField("Profile name", text: $name).textFieldStyle(.roundedBorder).disabled(model.profilesReadOnly)
             HStack {
                 Button("Create Empty") { perform { ConfigManager.shared.createProfile(name: name) } }
                 Button("Duplicate Current") { perform { ConfigManager.shared.duplicateProfile(source: model.profile, as: name) } }
                 Button("Rename") { perform { ConfigManager.shared.renameProfile(from: model.profile, to: name) } }
-            }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.disabled(model.profilesReadOnly || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Divider()
             HStack {
                 Button("Delete Profile…") {
                     let alert = NSAlert()
                     alert.messageText = "Delete \(model.profile)?"
-                    alert.informativeText = "This profile's assignments will be deleted."
+                    alert.informativeText = "This profile and its app bindings will be removed. Buttons that switch to it will be disabled. Undo Profile Change can recover them during this session."
                     alert.addButton(withTitle: "Delete")
                     alert.addButton(withTitle: "Cancel")
                     if alert.runModal() == .alertFirstButtonReturn {
                         perform { ConfigManager.shared.deleteProfile(named: model.profile) }
                     }
-                }.disabled(model.profiles.count <= 1)
+                }.disabled(model.profilesReadOnly || model.profiles.count <= 1)
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
@@ -268,7 +276,7 @@ struct ProfileManagerPane: View {
     }
 
     private func perform(_ action: () -> Bool) {
-        guard action() else { error = "The operation failed. Choose a different, non-empty name."; return }
+        guard action() else { error = ConfigManager.shared.lastError ?? "The operation failed. Choose a different, non-empty name."; return }
         name = ""
         error = nil
         model.refresh()

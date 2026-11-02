@@ -21,7 +21,7 @@ final class EventTapManager {
 
     private(set) var isListeningOnly: Bool = true
     var isRemappingEnabled: Bool {
-        get { return !isListeningOnly && !ConfigManager.shared.currentProfileIsOnboardOnly }
+        get { return !isListeningOnly && !ConfigManager.shared.currentProfileIsOnboardOnly && !ConfigManager.shared.profilesReadOnly }
         set {
             let newListenOnly = !newValue
             if newListenOnly != isListeningOnly {

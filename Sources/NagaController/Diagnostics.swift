@@ -27,6 +27,9 @@ enum NagaDiagnostics {
             guard !(saveOnboard && restoreOnboard) else { throw RazerHardwareError.invalidValue("Choose either save or restore.") }
             if saveOnboard {
                 ConfigManager.shared.load()
+                guard !ConfigManager.shared.profilesReadOnly else {
+                    throw RazerHardwareError.invalidValue("Reload or restore the local profiles file before saving to the mouse.")
+                }
                 let plan = OnboardProfilePlan(name: ConfigManager.shared.currentProfileName, mapping: ConfigManager.shared.mappingForCurrentProfile(),
                                               hypershift: ConfigManager.shared.mappingForCurrentProfile(layer: .hypershift))
                 report["profile"] = plan.name

@@ -40,13 +40,13 @@ struct OnboardProfilePane: View {
                     .disabled(!model.onboardActive || !device.isConnected || device.isBusy)
                 Spacer()
                 Button("Import from Mouse") { device.importOnboard() }
-                    .disabled(!device.isConnected || device.isBusy)
+                    .disabled(model.profilesReadOnly || !device.isConnected || device.isBusy)
                     .help("Create a profile for editing and saving to the mouse. Imported profiles keep software remapping paused.")
                 Button("Refresh") { device.refresh() }.disabled(device.isBusy)
             }
             HStack {
                 Button("Save to Mouse") { device.saveOnboard(plan) }
-                    .disabled(!plan.isSupported || !device.isConnected || device.isBusy || device.driverModeEnabled || device.recoveryPending)
+                    .disabled(model.profilesReadOnly || !plan.isSupported || !device.isConnected || device.isBusy || device.driverModeEnabled || device.recoveryPending)
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }

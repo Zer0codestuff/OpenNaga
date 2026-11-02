@@ -265,14 +265,18 @@ enum InputEngineTests {
         try check(restored.currentProfileName == "Primo", "Selection persisted after rename")
         restored.setCurrentProfile("Secondo")
         try check(restored.mappingForCurrentProfile()[3] == .profileSwitch(profile: "Primo", description: nil), "Renamed profile-switch target updated")
+        config.load() // The other instance saved a new selection; explicitly adopt it.
         try check(config.deleteProfile(named: "Secondo"), "Delete")
         restored.load()
         try check(restored.availableProfiles() == ["Primo"], "Deleted profiles do not reappear")
         let emptyURL = root.appendingPathComponent("empty.json")
         try Data(#"{"profiles":{}}"#.utf8).write(to: emptyURL)
-        try config.importProfiles(from: emptyURL, merge: false)
+        do {
+            try config.importProfiles(from: emptyURL, merge: false)
+            throw Failure(description: "Empty replacement unexpectedly accepted")
+        } catch is ProfileDataError {}
         restored.load()
-        try check(restored.profiles.isEmpty, "Empty profile collection survives reload")
+        try check(restored.availableProfiles() == ["Primo"], "Empty replacement cannot erase the last profile")
         let legacyURL = root.appendingPathComponent("legacy.json")
         try Data(#"{"profiles":{"Legacy":{"buttons":{"1":{"type":"keySequence","keys":[{"key":"c","modifiers":["cmd"]}]}}}},"settings":{"currentProfile":"Legacy"}}"#.utf8).write(to: legacyURL)
         try config.importProfiles(from: legacyURL, merge: false)

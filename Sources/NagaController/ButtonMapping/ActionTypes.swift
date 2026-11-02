@@ -93,6 +93,14 @@ struct KeyStroke: Equatable, Codable {
 }
 
 extension KeyStroke {
+    /// Legacy files may spell modifiers as command/option/control. Editors
+    /// must show their actual state and avoid adding duplicate aliases.
+    var normalizedModifiers: [String] {
+        let aliases = ["command": "cmd", "control": "ctrl", "option": "alt"]
+        let values = Set(modifiers.map { aliases[$0.lowercased()] ?? $0.lowercased() })
+        return ["ctrl", "alt", "shift", "cmd", "fn"].filter { values.contains($0) }
+    }
+
     var displayLabel: String {
         if let code = keyCode {
             return KeyStroke.displayName(for: code, fallback: key)

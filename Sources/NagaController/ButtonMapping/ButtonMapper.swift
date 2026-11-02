@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 
 final class ButtonMapper {
     static let shared = ButtonMapper()
+    static let didUpdateNotification = Notification.Name("NagaMapperDidUpdate")
 
     static let syntheticMarker: Int64 = 0x4e4147414354524c
     private var mapping: [Int: ActionType] = [:]
@@ -12,7 +13,11 @@ final class ButtonMapper {
     private enum Hold { case key(CGKeyCode, CGEventFlags), mouse(CGMouseButton) }
     private var activeHolds: [Int: Hold] = [:]
     private var pressed: Set<Int> = []
-    private var generation = 0
+    private(set) var lastActionError: String?
+    private lazy var macroRunner = MacroRunner(sendKey: { [weak self] in self?.sendKeyStroke($0) },
+                                               sendText: { [weak self] in self?.postText($0) },
+                                               didChange: { [weak self] in self?.notifyActionStatus() })
+    var activeMacroButtons: Set<Int> { macroRunner.activeButtons }
     private let eventSink: ((CGEvent) -> Void)?
     private let workspaceActionSink: ((SystemAction) -> Void)?
     private let syntheticScrollScaler = ScrollEventScaler()
@@ -80,13 +85,14 @@ final class ButtonMapper {
     /// old mapping still ends with its own key-up. Used for automatic profile
     /// changes, which can land while a mapped button is physically down.
     func swapMapping(_ newMapping: [Int: ActionType], hypershift: [Int: ActionType] = [:]) {
+        cancelMacros()
         mapping = newMapping
         hypershiftMapping = hypershift.filter { if case .hypershift = $0.value { return false }; return true }
     }
 
     func releaseAll() {
         syntheticScrollScaler.reset()
-        generation += 1
+        cancelMacros()
         for button in Array(activeHolds.keys) { handleRelease(buttonIndex: button) }
         pressed.removeAll()
         hypershiftTriggers.removeAll()
@@ -126,7 +132,7 @@ final class ButtonMapper {
                 activeHolds[buttonIndex] = .mouse(button)
                 postMouse(button, down: true)
             } else { performMouse(action) }
-        default: perform(action: action)
+        default: perform(action: action, buttonIndex: buttonIndex)
         }
     }
 
@@ -163,7 +169,7 @@ final class ButtonMapper {
         return drag
     }
 
-    private func perform(action: ActionType) {
+    private func perform(action: ActionType, buttonIndex: Int) {
         switch action {
         case .audio(let action, _): performAudio(action)
         case .system(let action, _): performSystem(action)
@@ -172,8 +178,8 @@ final class ButtonMapper {
         case .keySequence(let keys, _): keys.forEach(sendKeyStroke)
         case .application(let path, _): DispatchQueue.main.async { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
         case .systemCommand(let command, _): DispatchQueue.global(qos: .userInitiated).async { self.runShell(command) }
-        case .textSnippet(let text, _): runMacro([MacroStep(type: "text", text: text)])
-        case .macro(let steps, _): runMacro(steps)
+        case .textSnippet(let text, _): runMacro([MacroStep(type: "text", text: text)], buttonIndex: buttonIndex)
+        case .macro(let steps, _): runMacro(steps, buttonIndex: buttonIndex)
         case .profileSwitch(let profile, _): DispatchQueue.main.async { ConfigManager.shared.setCurrentProfile(profile) }
         case .hypershift: break // Handled as a held layer in handlePress.
         }
@@ -458,38 +464,36 @@ final class ButtonMapper {
         do {
             try task.run()
         } catch {
-            NSLog("[Mapping] Failed to run command: \(command), error: \(error.localizedDescription)")
+            NSLog("[Mapping] Failed to start shell command: \(error.localizedDescription)")
         }
     }
 
-    func runMacro(_ steps: [MacroStep]) {
-        let token = generation
-        func next(_ index: Int) {
-            guard token == self.generation, index < steps.count else { return }
-            let step = steps[index]
-            if step.type == "delay" {
-                let seconds = Double(max(0, min(step.delayMs ?? 0, 600_000))) / 1000
-                DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { next(index + 1) }
-                return
-            }
-            if step.type == "key", let key = step.keyStroke { self.sendKeyStroke(key) }
-            if step.type == "text", let text = step.text { self.typeText(text) }
-            DispatchQueue.main.async { next(index + 1) }
-        }
-        DispatchQueue.main.async { next(0) }
+    func runMacro(_ steps: [MacroStep], buttonIndex: Int = 0) {
+        do {
+            try macroRunner.start(steps, button: buttonIndex)
+            lastActionError = nil
+        } catch { lastActionError = error.localizedDescription }
+        notifyActionStatus()
     }
 
-    private func typeText(_ text: String) {
-        // Unicode events preserve the clipboard and non-Latin text.
-        for character in text {
-            let units = Array(String(character).utf16)
-            for down in [true, false] {
-                let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
-                units.withUnsafeBufferPointer { buffer in
-                    event?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-                }
-                post(event)
+    func cancelMacros() {
+        macroRunner.cancelAll()
+        if lastActionError != nil { lastActionError = nil; notifyActionStatus() }
+    }
+
+    private func notifyActionStatus() {
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Self.didUpdateNotification, object: self) }
+    }
+
+    private func postText(_ units: [UInt16]) {
+        // Unicode events preserve the clipboard. MacroRunner yields between
+        // bounded chunks so a long snippet never occupies the blocking tap.
+        for down in [true, false] {
+            let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down)
+            units.withUnsafeBufferPointer { buffer in
+                event?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
             }
+            post(event)
         }
     }
 }

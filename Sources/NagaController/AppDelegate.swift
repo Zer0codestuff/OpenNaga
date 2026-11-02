@@ -1,7 +1,7 @@
 import Cocoa
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var observers: [NSObjectProtocol] = []
@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hardwareRefreshTimer: Timer?
     private var observedDeviceName: String?
     private var observedTransport: String?
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var isSleeping = false
 
     private var snapshotPath: String? {
         let args = CommandLine.arguments
@@ -29,12 +31,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installApplicationMenu()
 
         if snapshotPath == nil {
+            observers.append(NotificationCenter.default.addObserver(forName: WorkspaceModel.restartInputNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restartInputService() }
+            })
+            let workspace = NSWorkspace.shared.notificationCenter
+            workspaceObservers.append(workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isSleeping = true
+                    self?.hardwareRefreshTimer?.invalidate()
+                    EventTapManager.shared.stop()
+                    HIDListener.shared.stop()
+                }
+            })
+            workspaceObservers.append(workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.isSleeping = false
+                    self?.restartInputService()
+                    self?.scheduleHardwareRefresh()
+                }
+            })
             observers.append(NotificationCenter.default.addObserver(forName: HIDListener.didUpdateNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in self?.checkHardwareConnection() }
             })
             observers.append(NotificationCenter.default.addObserver(forName: ConfigManager.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
                 Task { @MainActor in
-                    guard let self, !self.isTerminating,
+                    guard let self, !self.isTerminating, !self.isSleeping,
                           PermissionManager.shared.hasAccessibilityPermission(),
                           PermissionManager.shared.hasInputMonitoringPermission() else { return }
                     let listenOnly = !ConfigManager.shared.getRemappingEnabled() || OnboardProfileStore.isActive
@@ -68,6 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { @MainActor in
                     if name == RazerDeviceController.didUpdateNotification {
                         HIDListener.shared.setDriverModeEnabled(RazerDeviceController.shared.driverModeEnabled)
+                        if !RazerDeviceController.shared.isBusy, !EventTapManager.shared.isRunning {
+                            self?.startRemappingIfPermitted()
+                        }
                     }
                     self?.updateStatusItem()
                 }
@@ -109,12 +133,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EventTapManager.shared.stop()
         HIDListener.shared.stop()
         observers.forEach(NotificationCenter.default.removeObserver)
+        workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard snapshotPath == nil else { return .terminateNow }
         guard !isTerminating else { return .terminateLater }
         isTerminating = true
+        permissionTimer?.invalidate()
         hardwareRefreshTimer?.invalidate()
         EventTapManager.shared.stop()
         DispatchQueue.main.async {
@@ -126,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startRemappingIfPermitted() {
+        guard !isTerminating, !isSleeping, !RazerDeviceController.shared.isBusy else { return }
         let permission = PermissionManager.shared
         guard permission.hasAccessibilityPermission(), permission.hasInputMonitoringPermission() else { return }
         EventTapManager.shared.start(listenOnly: !ConfigManager.shared.getRemappingEnabled())
@@ -156,12 +183,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkPermissions() {
+        guard !isTerminating, !isSleeping else { return }
         let permission = PermissionManager.shared
         let input = permission.hasInputMonitoringPermission()
         if input && !hadInputPermission {
             HIDListener.shared.stop()
             HIDListener.shared.start()
             RazerDeviceController.shared.refresh()
+        } else if !input && hadInputPermission {
+            HIDListener.shared.stop()
         }
         let accessibility = permission.hasAccessibilityPermission()
         if hadInputPermission != input || hadAccessibilityPermission != accessibility {
@@ -174,6 +204,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else if !EventTapManager.shared.isRunning && !RazerDeviceController.shared.isBusy {
             startRemappingIfPermitted()
         }
+        updateStatusItem()
+    }
+
+    private func restartInputService() {
+        guard !isTerminating, !isSleeping else { return }
+        EventTapManager.shared.stop()
+        HIDListener.shared.stop()
+        if PermissionManager.shared.hasInputMonitoringPermission() { HIDListener.shared.start() }
+        startRemappingIfPermitted()
         updateStatusItem()
     }
 
@@ -223,6 +262,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.title = "Edit"
         let edit = NSMenu(title: "Edit")
         edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        let profileUndo = NSMenuItem(title: "Undo Profile Change", action: #selector(undoProfileChange), keyEquivalent: "z")
+        profileUndo.keyEquivalentModifierMask = [.command, .option]
+        profileUndo.target = self
+        edit.addItem(profileUndo)
+        let profileRedo = NSMenuItem(title: "Redo Profile Change", action: #selector(redoProfileChange), keyEquivalent: "z")
+        profileRedo.keyEquivalentModifierMask = [.command, .option, .shift]
+        profileRedo.target = self
+        edit.addItem(profileRedo)
+        edit.addItem(.separator())
         edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
@@ -230,6 +278,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.submenu = edit
         menu.addItem(editItem)
         NSApp.mainMenu = menu
+    }
+
+    @objc private func undoProfileChange() { _ = ConfigManager.shared.undo() }
+    @objc private func redoProfileChange() { _ = ConfigManager.shared.redo() }
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(undoProfileChange) { return ConfigManager.shared.canUndo }
+        if menuItem.action == #selector(redoProfileChange) { return ConfigManager.shared.canRedo }
+        return true
     }
 
     private func argument(after option: String) -> String? {

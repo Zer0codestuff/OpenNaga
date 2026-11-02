@@ -74,7 +74,8 @@ final class HIDListener {
             IOHIDManagerUnscheduleFromRunLoop(manager, loop, CFRunLoopMode.defaultMode.rawValue)
             IOHIDManagerClose(manager, 0)
             devices.removeAll(); valueStates.removeAll()
-            lock.lock(); runLoop = nil; rawState.reset(); heldButtons.removeAll(); lock.unlock()
+            lock.lock(); runLoop = nil; rawState.reset(); heldButtons.removeAll(); nativeKeysHeld.removeAll(); lock.unlock()
+            resetCorrelation()
             DispatchQueue.main.async {
                 self.thread = nil
                 self.manager = nil
@@ -96,7 +97,11 @@ final class HIDListener {
 
     func stop() {
         desiredRunning = false
-        lock.lock(); stopRequested = true; let loop = runLoop; lock.unlock()
+        lock.lock()
+        stopRequested = true
+        heldButtons.removeAll(); nativeKeysHeld.removeAll(); rawState.reset()
+        let loop = runLoop
+        lock.unlock()
         if let loop { CFRunLoopStop(loop) }
         // Do not join or wait on an event callback.
         resetCorrelation()

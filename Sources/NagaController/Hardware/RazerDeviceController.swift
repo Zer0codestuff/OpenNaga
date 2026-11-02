@@ -28,6 +28,7 @@ final class RazerDeviceController {
         submit(.mode(enabled))
     }
     func saveOnboard(_ plan: OnboardProfilePlan) {
+        guard !ConfigManager.shared.profilesReadOnly else { return }
         guard !isBusy, !shuttingDown, plan.isSupported else { return }
         EventTapManager.shared.stop()
         submit(.onboard(plan))
@@ -86,8 +87,11 @@ final class RazerDeviceController {
                     guard let functions = outcome.imported else { break }
                     let result = OnboardProfilePlan.mapping(from: functions)
                     let shifted = OnboardProfilePlan.hypershiftMapping(standard: functions, hypershift: outcome.importedHypershift ?? [:])
-                    let name = ConfigManager.shared.createProfile(named: "From Mouse", mapping: result.mapping,
-                                                                  hypershift: shifted.mapping, onboardOnly: true)
+                    guard let name = ConfigManager.shared.createProfile(named: "From Mouse", mapping: result.mapping,
+                                                                        hypershift: shifted.mapping, onboardOnly: true) else {
+                        self.statusMessage = ConfigManager.shared.lastError ?? "Unable to save the imported mouse profile."
+                        break
+                    }
                     self.statusMessage = (["Imported supported assignments into profile \(name). Edit this profile and use Save to Mouse to apply changes. Software remapping is paused for imported profiles."] + result.issues + shifted.issues).joined(separator: "\n")
                 default: break
                 }

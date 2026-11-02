@@ -4,12 +4,13 @@ import Foundation
 private let kRemappingEnabledKey = "remappingEnabled"
 private let kCurrentProfileKey = "currentProfile"
 
-struct ProfilesFile: Codable {
+struct ProfilesFile: Codable, Equatable {
     var profiles: [String: Profile]
     var settings: Settings?
+    var formatVersion: Int? = nil
 }
 
-struct Settings: Codable {
+struct Settings: Codable, Equatable {
     var currentProfile: String?
     var autoSwitchProfiles: Bool?
     var showNotifications: Bool?
@@ -18,7 +19,7 @@ struct Settings: Codable {
     var appProfiles: [String: String]? = nil
 }
 
-struct Profile: Codable {
+struct Profile: Codable, Equatable {
     var buttons: [String: ButtonAction]
     // Imported firmware assignments cannot reliably identify physical controls
     // through the factory keyboard/mouse event decoder.
@@ -32,7 +33,7 @@ struct Profile: Codable {
     }
 }
 
-struct ButtonAction: Codable {
+struct ButtonAction: Codable, Equatable {
     let type: String
     let keys: [KeyStroke]? // for keySequence
     let description: String?
@@ -40,7 +41,7 @@ struct ButtonAction: Codable {
     let command: String? // for systemCommand
     let text: String? // for textSnippet
     let steps: [MacroStep]? // for macro
-    let profile: String? // for profileSwitch
+    var profile: String? // for profileSwitch
     var mouseAction: MouseAction? = nil
     var audioAction: AudioAction? = nil
     var systemAction: SystemAction? = nil
@@ -52,6 +53,18 @@ final class ConfigManager {
     private(set) var lastError: String?
     private var storageURL: URL?
     private var defaults = UserDefaults.standard
+    private lazy var fileStore = ProfileFileStore(url: storageURL ?? DataFolder.file("profiles.json"))
+    private struct State: Equatable {
+        let file: ProfilesFile
+        let runtime: String
+    }
+    private var undoHistory: [State] = []
+    private var redoHistory: [State] = []
+    private(set) var profilesReadOnly = false
+    var canUndo: Bool { !undoHistory.isEmpty && !profilesReadOnly }
+    var canRedo: Bool { !redoHistory.isEmpty && !profilesReadOnly }
+    var profilesFolder: URL { fileStore.url.deletingLastPathComponent() }
+    var hasProfileBackup: Bool { FileManager.default.fileExists(atPath: fileStore.backupURL.path) }
 
     private(set) var profiles: [String: Profile] = [:]
     /// The profile the user selected. It is what the editor shows, what is
@@ -79,6 +92,7 @@ final class ConfigManager {
         // Load bundled defaults first
         var mergedProfiles: [String: Profile] = [:]
         var mergedSettings: Settings? = nil
+        var fileSelection: String?
         if let url = Bundle.main.url(forResource: "default-profiles", withExtension: "json") {
             do {
                 let data = try Data(contentsOf: url)
@@ -93,25 +107,29 @@ final class ConfigManager {
         }
 
         // Overlay with user profiles if present
-        if let userURL = try? userProfilesURL(), FileManager.default.fileExists(atPath: userURL.path) {
-            do {
-                let userData = try Data(contentsOf: userURL)
-                let upf = try JSONDecoder().decode(ProfilesFile.self, from: userData)
-                // Overlay: replace/merge profiles
-                mergedProfiles = upf.profiles
-                // Overlay settings
-                if let s = upf.settings { mergedSettings = s }
-            } catch {
-                lastError = "Unable to load profiles: \(error.localizedDescription)"
+        do {
+            if let user = try fileStore.load() {
+                mergedProfiles = user.profiles
+                if let settings = user.settings { mergedSettings = settings }
+                fileSelection = user.settings?.currentProfile
             }
+            profilesReadOnly = false
+        } catch {
+            profilesReadOnly = true
+            lastError = "Unable to load profiles. The file is protected: \(error.localizedDescription)"
+            // A failed reload must retain the last usable in-memory profiles.
+            if !profiles.isEmpty { updateRuntimeMapping(); notify(); return }
         }
 
         // Adopt merged
         self.profiles = mergedProfiles
 
-        // Preferred profile: UserDefaults > settings.currentProfile > "Default"
+        // The transactional document is authoritative. Defaults are only a
+        // fallback for old files without a saved selection.
         let ud = defaults
-        if let saved = ud.string(forKey: kCurrentProfileKey) {
+        if let saved = fileSelection, profiles[saved] != nil {
+            currentProfileName = saved
+        } else if let saved = ud.string(forKey: kCurrentProfileKey), profiles[saved] != nil {
             currentProfileName = saved
         } else if let bundled = mergedSettings?.currentProfile {
             currentProfileName = bundled
@@ -123,9 +141,10 @@ final class ConfigManager {
             currentProfileName = profiles.keys.sorted().first ?? "Default"
         }
         autoSwitchEnabled = mergedSettings?.autoSwitchProfiles ?? false
-        appProfiles = mergedSettings?.appProfiles ?? [:]
+        appProfiles = (mergedSettings?.appProfiles ?? [:]).filter { profiles[$0.value] != nil }
         showNotifications = mergedSettings?.showNotifications
         runtimeProfileName = currentProfileName
+        undoHistory.removeAll(); redoHistory.removeAll()
         updateRuntimeMapping()
         notify()
     }
@@ -134,17 +153,17 @@ final class ConfigManager {
     /// app change, so a manual switch is never undone by an app binding.
     func setCurrentProfile(_ name: String) {
         guard profiles[name] != nil else { return }
-        currentProfileName = name
-        runtimeProfileName = name
-        defaults.set(name, forKey: kCurrentProfileKey)
-        updateRuntimeMapping()
-        saveUserProfiles()
+        change(recordUndo: false) {
+            self.currentProfileName = name
+            self.runtimeProfileName = name
+        }
     }
 
     /// Makes `name` the live profile without selecting it. Held buttons keep
     /// the output they started. Nothing is saved.
     func applyAutomaticProfile(_ name: String) {
-        guard profiles[name] != nil, name != runtimeProfileName else { return }
+        guard !profilesReadOnly, profiles[name] != nil, profiles[name]?.onboardOnly != true,
+              !currentProfileIsOnboardOnly, name != runtimeProfileName else { return }
         runtimeProfileName = name
         updateRuntimeMapping(preservingHolds: true)
         notify()
@@ -152,23 +171,20 @@ final class ConfigManager {
 
     func setAutoSwitchEnabled(_ enabled: Bool) {
         guard enabled != autoSwitchEnabled else { return }
-        autoSwitchEnabled = enabled
-        saveUserProfiles()
+        change { self.autoSwitchEnabled = enabled }
     }
 
     func setAppProfile(_ profile: String?, forBundleIdentifier bundleID: String) {
         guard !bundleID.isEmpty else { return }
-        if let profile {
-            guard profiles[profile] != nil else { return }
-            appProfiles[bundleID] = profile
-        } else {
-            appProfiles.removeValue(forKey: bundleID)
+        if let profile, profiles[profile] == nil { return }
+        change {
+            if let profile { self.appProfiles[bundleID] = profile }
+            else { self.appProfiles.removeValue(forKey: bundleID) }
         }
-        saveUserProfiles()
     }
 
     func getRemappingEnabled() -> Bool {
-        return !currentProfileIsOnboardOnly && defaults.bool(forKey: kRemappingEnabledKey)
+        return !profilesReadOnly && !currentProfileIsOnboardOnly && defaults.bool(forKey: kRemappingEnabledKey)
     }
 
     var currentProfileIsOnboardOnly: Bool { profiles[currentProfileName]?.onboardOnly == true }
@@ -216,28 +232,28 @@ final class ConfigManager {
     func createProfile(name: String, basedOn base: String? = nil) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, profiles[trimmed] == nil else { return false }
-        if let base = base, let p = profiles[base] {
-            profiles[trimmed] = p
-        } else {
-            profiles[trimmed] = Profile(buttons: [:])
+        return change {
+            self.profiles[trimmed] = base.flatMap { self.profiles[$0] } ?? Profile(buttons: [:])
+            self.currentProfileName = trimmed
+            self.runtimeProfileName = trimmed
         }
-        setCurrentProfile(trimmed)
-        return true
     }
 
     // Creates and selects a profile from a complete mapping, e.g. one read from the mouse.
     // Returns the name used, adding a number when the name is taken.
     @discardableResult
-    func createProfile(named base: String, mapping: [Int: ActionType], hypershift: [Int: ActionType] = [:], onboardOnly: Bool = false) -> String {
+    func createProfile(named base: String, mapping: [Int: ActionType], hypershift: [Int: ActionType] = [:], onboardOnly: Bool = false) -> String? {
         var name = base
-        var suffix = 2
-        while profiles[name] != nil { name = "\(base) \(suffix)"; suffix += 1 }
+        if profiles[name] != nil { name = ProfileImportDocument.uniqueName(base, reserved: Set(profiles.keys)) }
         func stored(_ layer: [Int: ActionType]) -> [String: ButtonAction] {
             Dictionary(uniqueKeysWithValues: layer.map { (String($0.key), toButtonAction($0.value)) })
         }
-        profiles[name] = Profile(buttons: stored(mapping), onboardOnly: onboardOnly ? true : nil,
-                                 hypershift: hypershift.isEmpty ? nil : stored(hypershift))
-        setCurrentProfile(name)
+        guard change({
+            self.profiles[name] = Profile(buttons: stored(mapping), onboardOnly: onboardOnly ? true : nil,
+                                         hypershift: hypershift.isEmpty ? nil : stored(hypershift))
+            self.currentProfileName = name
+            self.runtimeProfileName = name
+        }) else { return nil }
         return name
     }
 
@@ -251,25 +267,23 @@ final class ConfigManager {
     func renameProfile(from oldName: String, to newName: String) -> Bool {
         let newTrim = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard oldName != newTrim, !newTrim.isEmpty, let existing = profiles[oldName], profiles[newTrim] == nil else { return false }
-        profiles.removeValue(forKey: oldName)
-        profiles[newTrim] = existing
-        for name in Array(profiles.keys) {
-            guard var profile = profiles[name] else { continue }
-            for (button, action) in profile.buttons where action.type == "profileSwitch" && action.profile == oldName {
-                profile.buttons[button] = toButtonAction(.profileSwitch(profile: newTrim, description: action.description))
+        return change {
+            profiles.removeValue(forKey: oldName)
+            profiles[newTrim] = existing
+            for name in Array(profiles.keys) {
+                guard var profile = profiles[name] else { continue }
+                for (button, action) in profile.buttons where action.type == "profileSwitch" && action.profile == oldName {
+                    profile.buttons[button] = toButtonAction(.profileSwitch(profile: newTrim, description: action.description))
+                }
+                for (button, action) in profile.hypershift ?? [:] where action.type == "profileSwitch" && action.profile == oldName {
+                    profile.hypershift?[button] = toButtonAction(.profileSwitch(profile: newTrim, description: action.description))
+                }
+                profiles[name] = profile
             }
-            for (button, action) in profile.hypershift ?? [:] where action.type == "profileSwitch" && action.profile == oldName {
-                profile.hypershift?[button] = toButtonAction(.profileSwitch(profile: newTrim, description: action.description))
-            }
-            profiles[name] = profile
+            for (bundleID, bound) in appProfiles where bound == oldName { appProfiles[bundleID] = newTrim }
+            if currentProfileName == oldName { currentProfileName = newTrim }
+            if runtimeProfileName == oldName { runtimeProfileName = newTrim }
         }
-        for (bundleID, bound) in appProfiles where bound == oldName { appProfiles[bundleID] = newTrim }
-        if currentProfileName == oldName { currentProfileName = newTrim }
-        if runtimeProfileName == oldName { runtimeProfileName = newTrim }
-        defaults.set(currentProfileName, forKey: kCurrentProfileKey)
-        updateRuntimeMapping()
-        saveUserProfiles()
-        return true
     }
 
     @discardableResult
@@ -277,59 +291,59 @@ final class ConfigManager {
         guard profiles[name] != nil else { return false }
         // Prevent deleting the last profile
         if profiles.count <= 1 { return false }
-        profiles.removeValue(forKey: name)
-        appProfiles = appProfiles.filter { $0.value != name }
-        if currentProfileName == name {
-            // Switch to an arbitrary remaining profile
-            if let next = profiles.keys.sorted().first {
-                setCurrentProfile(next)
+        return change {
+            profiles.removeValue(forKey: name)
+            appProfiles = appProfiles.filter { $0.value != name }
+            // Never leave a switch pointing at a deleted profile. Disabled actions
+            // avoid leaking the original button's key after a target is removed.
+            for key in Array(profiles.keys) {
+                guard var profile = profiles[key] else { continue }
+                for button in profile.buttons.keys where profile.buttons[button]?.type == "profileSwitch" && profile.buttons[button]?.profile == name {
+                    profile.buttons[button] = toButtonAction(.disabled)
+                }
+                for button in (profile.hypershift ?? [:]).keys where profile.hypershift?[button]?.type == "profileSwitch" && profile.hypershift?[button]?.profile == name {
+                    profile.hypershift?[button] = toButtonAction(.disabled)
+                }
+                profiles[key] = profile
             }
-        } else {
-            if runtimeProfileName == name { runtimeProfileName = currentProfileName }
-            // refresh mapping for the live profile
-            updateRuntimeMapping()
+            if currentProfileName == name {
+                // Switch to an arbitrary remaining profile
+                if let next = profiles.keys.sorted().first {
+                    currentProfileName = next
+                    runtimeProfileName = next
+                }
+            } else {
+                if runtimeProfileName == name { runtimeProfileName = currentProfileName }
+            }
         }
-        saveUserProfiles()
-        return true
     }
 
     // MARK: - Import / Export
 
-    func importProfiles(from url: URL, merge: Bool = true) throws {
-        let data = try Data(contentsOf: url)
-        let pf = try JSONDecoder().decode(ProfilesFile.self, from: data)
-        if merge {
-            for (k, v) in pf.profiles { profiles[k] = v }
-        } else {
-            profiles = pf.profiles
-        }
-        let importedBindings = (pf.settings?.appProfiles ?? [:]).filter { profiles[$0.value] != nil }
-        appProfiles = merge ? appProfiles.merging(importedBindings) { _, imported in imported } : importedBindings
-        appProfiles = appProfiles.filter { profiles[$0.value] != nil }
-        if let cp = pf.settings?.currentProfile, profiles[cp] != nil {
-            setCurrentProfile(cp)
-        } else {
-            if profiles[currentProfileName] == nil { currentProfileName = profiles.keys.sorted().first ?? "Default" }
-            if profiles[runtimeProfileName] == nil { runtimeProfileName = currentProfileName }
-            updateRuntimeMapping()
-        }
-        saveUserProfiles()
+    func importProfiles(from url: URL, merge: Bool = true, policy: ProfileImportPolicy = .keepBoth) throws {
+        try importProfiles(ProfileImportDocument(url: url), merge: merge, policy: policy)
+    }
+
+    func importProfiles(_ document: ProfileImportDocument, merge: Bool = true, policy: ProfileImportPolicy = .keepBoth) throws {
+        let previous = state()
+        let candidate = merge ? document.merged(with: previous.file, policy: policy) : document.file
+        guard change({
+            self.adopt(candidate)
+            // Imported mouse profiles cannot remain an automatic runtime target.
+            if self.profiles[self.runtimeProfileName]?.onboardOnly == true { self.runtimeProfileName = self.currentProfileName }
+        }) else { throw ProfileDataError(message: lastError ?? "Unable to import profiles.") }
     }
 
     func exportCurrentProfile(to url: URL) throws {
-        guard let p = profiles[currentProfileName] else { return }
+        guard let p = profiles[currentProfileName] else { throw ProfileDataError(message: "Select a valid profile before exporting.") }
         let pf = ProfilesFile(profiles: [currentProfileName: p], settings: Settings(currentProfile: currentProfileName, autoSwitchProfiles: nil, showNotifications: nil))
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(pf)
+        let data = try ProfileFileStore.encode(pf)
         try data.write(to: url, options: .atomic)
     }
 
     func exportAllProfiles(to url: URL) throws {
         let pf = ProfilesFile(profiles: profiles, settings: persistedSettings())
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(pf)
+        let data = try ProfileFileStore.encode(pf)
         try data.write(to: url, options: .atomic)
     }
 
@@ -402,39 +416,114 @@ final class ConfigManager {
     func setAction(forButton index: Int, action: ActionType?, layer: MappingLayer = .standard) {
         guard (1...19).contains(index) else { return }
         if layer == .hypershift, case .hypershift? = action { return }
-        var profile = profiles[currentProfileName] ?? Profile(buttons: [:])
-        let key = String(index)
-        var buttons = profile.buttons(in: layer)
-        if let action = action {
-            buttons[key] = toButtonAction(action)
-        } else {
-            buttons.removeValue(forKey: key)
+        change {
+            var profile = profiles[currentProfileName] ?? Profile(buttons: [:])
+            let key = String(index)
+            var buttons = profile.buttons(in: layer)
+            if let action = action {
+                buttons[key] = toButtonAction(action)
+            } else {
+                buttons.removeValue(forKey: key)
+            }
+            switch layer {
+            case .standard: profile.buttons = buttons
+            case .hypershift: profile.hypershift = buttons.isEmpty ? nil : buttons
+            }
+            profiles[currentProfileName] = profile
         }
-        switch layer {
-        case .standard: profile.buttons = buttons
-        case .hypershift: profile.hypershift = buttons.isEmpty ? nil : buttons
-        }
-        profiles[currentProfileName] = profile
-        updateRuntimeMapping()
-        saveUserProfiles()
     }
 
-    // Persist current profiles to Application Support
-    func saveUserProfiles() {
-        defaults.set(currentProfileName, forKey: kCurrentProfileKey)
+    /// Commit before publishing a mapping or updating defaults. Failed saves
+    /// roll back memory, selection and history to the previous usable state.
+    @discardableResult
+    private func change(recordUndo: Bool = true, _ edit: () -> Void) -> Bool {
+        guard !profilesReadOnly else { notify(); return false }
+        let previous = state()
+        edit()
+        if state() == previous { lastError = nil; notify(); return true }
         do {
-            let url = try userProfilesURL()
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let pf = ProfilesFile(profiles: profiles, settings: persistedSettings())
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(pf)
-            try data.write(to: url, options: .atomic)
+            try fileStore.save(state().file)
+            defaults.set(currentProfileName, forKey: kCurrentProfileKey)
+            if recordUndo && !previous.file.profiles.isEmpty {
+                undoHistory.append(previous)
+                if undoHistory.count > 12 { undoHistory.removeFirst() }
+                redoHistory.removeAll()
+            }
+            updateRuntimeMapping()
             lastError = nil
+            notify()
+            return true
         } catch {
+            restore(previous)
             lastError = "Unable to save profiles: \(error.localizedDescription)"
+            notify()
+            return false
         }
+    }
+
+    /// Explicit persistence for callers that only need to flush the current
+    /// document. Normal editing uses change so memory also rolls back on error.
+    func saveUserProfiles() {
+        do {
+            try fileStore.save(state().file)
+            defaults.set(currentProfileName, forKey: kCurrentProfileKey)
+            lastError = nil
+        } catch { lastError = "Unable to save profiles: \(error.localizedDescription)" }
         notify()
+    }
+
+    @discardableResult
+    func undo() -> Bool { moveHistory(undoing: true) }
+    @discardableResult
+    func redo() -> Bool { moveHistory(undoing: false) }
+
+    private func moveHistory(undoing: Bool) -> Bool {
+        guard let target = undoing ? undoHistory.last : redoHistory.last else { return false }
+        let current = state()
+        guard change(recordUndo: false, { self.restore(target) }) else { return false }
+        if undoing { undoHistory.removeLast(); redoHistory.append(current) }
+        else { redoHistory.removeLast(); undoHistory.append(current) }
+        notify()
+        return true
+    }
+
+    @discardableResult
+    func restoreProfileBackup() -> Bool {
+        do {
+            let recovered = try fileStore.restoreBackup()
+            adopt(recovered)
+            runtimeProfileName = currentProfileName
+            profilesReadOnly = false
+            undoHistory.removeAll(); redoHistory.removeAll()
+            defaults.set(currentProfileName, forKey: kCurrentProfileKey)
+            updateRuntimeMapping()
+            lastError = nil
+            notify()
+            return true
+        } catch {
+            lastError = "Unable to restore profiles: \(error.localizedDescription)"
+            notify()
+            return false
+        }
+    }
+
+    private func state() -> State {
+        State(file: ProfilesFile(profiles: profiles, settings: persistedSettings()), runtime: runtimeProfileName)
+    }
+
+    private func restore(_ state: State) {
+        adopt(state.file)
+        runtimeProfileName = state.runtime
+    }
+
+    private func adopt(_ file: ProfilesFile) {
+        profiles = file.profiles
+        let selected = file.settings?.currentProfile ?? currentProfileName
+        currentProfileName = profiles[selected] != nil ? selected : profiles.keys.sorted().first ?? "Default"
+        if profiles[runtimeProfileName] == nil { runtimeProfileName = currentProfileName }
+        autoSwitchEnabled = file.settings?.autoSwitchProfiles ?? false
+        appProfiles = (file.settings?.appProfiles ?? [:]).filter { profiles[$0.value] != nil }
+        showNotifications = file.settings?.showNotifications
     }
 
     private func notify() {
@@ -442,7 +531,7 @@ final class ConfigManager {
     }
 
     private func updateRuntimeMapping(preservingHolds: Bool = false) {
-        let onboard = currentProfileIsOnboardOnly
+        let onboard = profilesReadOnly || currentProfileIsOnboardOnly || profiles[runtimeProfileName]?.onboardOnly == true
         let standard = onboard ? [:] : mappingForRuntimeProfile()
         let shifted = onboard ? [:] : mappingForRuntimeProfile(layer: .hypershift)
         if preservingHolds {
@@ -450,11 +539,6 @@ final class ConfigManager {
         } else {
             ButtonMapper.shared.updateMapping(standard, hypershift: shifted)
         }
-    }
-
-    private func userProfilesURL() throws -> URL {
-        if let storageURL { return storageURL }
-        return DataFolder.file("profiles.json")
     }
 
 }

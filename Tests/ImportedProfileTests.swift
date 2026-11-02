@@ -21,7 +21,9 @@ enum ImportedProfileTests {
         // Duplicate native outputs have no physical source identity in CGEvent.
         let mapping: [Int: ActionType] = [1: .mouse(action: .leftClick, description: nil),
                                           18: .mouse(action: .rightClick, description: nil)]
-        let imported = config.createProfile(named: "From Mouse", mapping: mapping, onboardOnly: true)
+        guard let imported = config.createProfile(named: "From Mouse", mapping: mapping, onboardOnly: true) else {
+            throw Failure(description: "Imported mouse profile can be saved")
+        }
         config.setRemappingEnabled(true)
         try check(config.currentProfileIsOnboardOnly && !config.getRemappingEnabled(), "Imported assignments cannot activate software remapping")
         try check(!ButtonMapper.shared.hasMapping(buttonIndex: 1) && !ButtonMapper.shared.hasMapping(buttonIndex: 18), "Imported duplicate clicks never reach the runtime mapper")

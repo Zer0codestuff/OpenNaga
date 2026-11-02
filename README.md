@@ -31,6 +31,8 @@ OpenNaga is an independent project, not affiliated with or endorsed by Razer. It
 
 Release 2.7.0 adds automatic per-app profile switching in software, including over Bluetooth. See the [release notes](Documentation/release-2.7.0.md) for changes and verification limits.
 
+Unreleased source changes add [profile recovery](#profile-backups-and-recovery-unreleased) and [visual macro editing](#macros-and-text-unreleased). These changes are not included in the 2.7.0 download.
+
 ## Requirements
 
 - macOS 13.0 or later. The downloadable DMG contains an Apple Silicon build; Intel Macs must build from source.
@@ -76,6 +78,28 @@ App Profiles gives an app its own profile, so the same side button can do differ
 3. Come back to any other app and the profile you selected in the menu bar or in Buttons applies again.
 
 OpenNaga watches which app is in front and swaps the live assignments; nothing is written to the mouse, so this works over Bluetooth. Only apps that appear in the Dock count, so Spotlight and menu bar helpers do not flip the profile. A button held while you switch apps still ends with the key it started. Choosing a profile by hand applies at once and stays until the next app change. While OpenNaga's own window is in front, the profile you selected is the live one, so what you edit is what you test. Switching pauses while a profile saved in the mouse or imported from it is active, because those never remap in software. Deleting or renaming a profile updates its app bindings. Bindings are stored in `profiles.json` under `settings.appProfiles`, a map from bundle identifier to profile name; older files load unchanged.
+
+## Profile backups and recovery (unreleased)
+
+Profile edits are published only after saving succeeds. If saving fails, the previous assignments and selection stay active. The app checks for external file changes and uses a nonblocking lock so another instance cannot silently overwrite a newer save.
+
+Each save keeps the previous valid document as `profiles.backup.json` beside `profiles.json` in `~/Library/Application Support/OpenNaga`. Both files use owner-only permissions. **Status → Profiles and recovery** offers Reload Profiles, Show Folder and Restore Backup. Restore preserves the current file separately as `profiles.before-restore.<id>.json`, even if it is unreadable. It does not restore or write mouse memory.
+
+An unreadable or unsupported profile file pauses editing and software remapping until it is repaired and reloaded or a backup is restored. The file is never replaced with defaults after a load failure. Files are limited to 2 MiB and 128 profiles; unsupported actions and invalid macros produce an error before saving.
+
+**Undo Profile Change** and **Redo Profile Change** are available in the Edit menu, the profile menu and Status. The shortcuts are Option-Command-Z and Shift-Option-Command-Z. The last 12 document changes are kept during the session. Text fields retain their normal Command-Z behavior. Reloading profiles or restoring a backup starts a new history.
+
+Import shows matching profile names and whether shell commands are present. **Keep Both** preserves existing profiles, gives incoming duplicates unique names, and rewrites their profile-switch actions and app bindings. Existing app bindings and the current selection remain in place. **Replace Matching** requires an explicit second confirmation and preserves mouse-import protection. Review imported commands before using them. Deleting a profile removes its app bindings and disables actions that switched to it; Undo can recover them.
+
+## Macros and text (unreleased)
+
+Choose **Macro** for a button, then add key, text or delay steps. Select a step to edit it, record a shortcut, reorder it or remove it. Changes stay in a draft until **Apply Macro**. Apply before changing controls or profiles; unapplied drafts are not stored. Advanced JSON remains available for existing workflows. Macros support up to 256 steps, 16 KiB of text, delays of 0 to 600,000 ms per step and one hour of total delay.
+
+Pressing the same button again stops its current macro and restarts it from the beginning. Macros on different buttons run independently. **Status → Stop Macros** cancels all running macros. Stopping input, disconnecting or changing the live profile also cancels pending macro steps. Completed key strokes stay balanced; stopping cannot undo an action an app already received.
+
+Choose **Text** to edit a text snippet directly. Text uses Unicode events without changing the clipboard, and long snippets yield between small chunks so they can be interrupted. Macros, multi-character text and software profile switching need OpenNaga running; Save to Mouse lists unsupported assignments.
+
+**Status → Restart Input Service** resets interception and held outputs without writing hardware settings. Sleep releases held outputs and pending macros; wake reconnects the input service when permissions allow it. Physical sleep/wake validation remains separate from automated and runtime checks.
 
 ## Save a profile to the mouse
 
@@ -140,7 +164,7 @@ Other ways to configure a Naga V2 HyperSpeed on a Mac:
 
 Razer Synapse for Mac does not support this mouse; owners are still asking for it on [Razer Insider](https://insider.razer.com/razer-synapse-for-mac-preview-61/naga-v2-hyperspeed-support-in-synapse-preview-78820). The usual workaround is to configure the mouse in Synapse on a Windows PC and carry the onboard profile over.
 
-[NagaController](https://github.com/DParent10/NagaController) is the project OpenNaga started from and is still maintained. [SteerMouse](https://plentycom.jp/en/steermouse/) works with mice from many brands and has per-application profiles, which OpenNaga does not have.
+[NagaController](https://github.com/DParent10/NagaController) is the project OpenNaga started from and is still maintained. [SteerMouse](https://plentycom.jp/en/steermouse/) works with mice from many brands and has per-application profiles. OpenNaga's app profiles match bundle identifiers and run in software.
 
 Details for the other apps come from their own pages and the [SteerMouse release notes](https://plentycom.jp/en/steermouse/download.php), checked in October 2026.
 
