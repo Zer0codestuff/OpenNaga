@@ -1,0 +1,129 @@
+/* OpenNaga: native Adwaita light and dark appearance with restrained Razer
+   green accents. Accent colors come from accent-light.css / accent-dark.css. */
+
+.naga-header { min-height: 76px; }
+.naga-brand { font-size: 22px; font-weight: 600; }
+.naga-brand-icon { color: @naga_accent; }
+
+.naga-section {
+  min-height: 36px;
+  border-radius: 7px;
+  padding: 0 12px;
+  font-weight: 400;
+}
+.naga-section.selected {
+  background-color: alpha(@naga_accent, 0.13);
+  color: @naga_accent;
+  font-weight: 500;
+}
+
+.naga-title { font-size: 22px; font-weight: 600; }
+.naga-subtitle { font-size: 13px; }
+.naga-small { font-size: 12px; }
+.naga-tiny { font-size: 11px; }
+.naga-device { font-size: 12px; font-weight: 500; }
+
+.naga-dot {
+  min-width: 6px;
+  min-height: 6px;
+  border-radius: 3px;
+  background-color: alpha(currentColor, 0.45);
+}
+.naga-dot.on { background-color: @naga_accent; }
+
+.naga-banner {
+  padding: 10px 24px;
+  background-color: alpha(currentColor, 0.04);
+}
+.naga-error-banner { padding: 10px 24px; color: @error_color; }
+
+.naga-footer {
+  min-height: 32px;
+  padding: 0 20px;
+  font-size: 11px;
+}
+
+.naga-cell {
+  min-height: 40px;
+  border-radius: 7px;
+  padding: 0 8px;
+  background-color: alpha(currentColor, 0.035);
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.naga-cell:hover { background-color: alpha(currentColor, 0.07); }
+.naga-cell.selected {
+  background-color: alpha(@naga_accent, 0.13);
+  box-shadow: inset 0 0 0 1px alpha(@naga_accent, 0.5);
+}
+.naga-cell.active { box-shadow: inset 0 0 0 2px @naga_accent; }
+.naga-badge {
+  min-width: 23px;
+  min-height: 26px;
+  border-radius: 5px;
+  background-color: alpha(currentColor, 0.06);
+  color: alpha(currentColor, 0.6);
+  font-size: 12px;
+  font-weight: 500;
+}
+.naga-cell.selected .naga-badge {
+  background-color: alpha(@naga_accent, 0.12);
+  color: @naga_accent;
+}
+.naga-cell label { font-weight: 400; }
+.naga-cell .naga-badge { font-weight: 500; }
+.naga-cell .naga-cell-name { font-size: 11px; font-weight: 500; }
+.naga-cell .naga-cell-summary { font-size: 11px; }
+
+.naga-inspector { background-color: alpha(@window_bg_color, 0.45); }
+.naga-inspector-badge {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  background-color: alpha(@naga_accent, 0.13);
+  color: @naga_accent;
+  font-size: 20px;
+  font-weight: 500;
+}
+.naga-inspector-title { font-size: 17px; font-weight: 600; }
+
+.naga-keydisplay {
+  min-height: 84px;
+  border-radius: 10px;
+  background-color: alpha(currentColor, 0.05);
+}
+.naga-keydisplay-big { font-size: 28px; font-weight: 500; }
+.naga-keydisplay-empty { font-size: 17px; font-weight: 500; }
+
+.naga-keycap {
+  min-height: 33px;
+  min-width: 0;
+  padding: 0 2px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.naga-keycap.selected {
+  background-color: alpha(@naga_accent, 0.13);
+  color: @naga_accent;
+  box-shadow: inset 0 0 0 1px alpha(@naga_accent, 0.6);
+}
+
+.naga-group { padding: 14px; }
+.naga-mono { font-family: monospace; }
+.naga-warning { color: @warning_color; }
+.naga-error { color: @error_color; }
+.naga-ok { color: @success_color; }
+.naga-accent { color: @naga_accent; }
+
+.naga-segmented > button { min-width: 80px; }
+.naga-segmented > button:checked {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}
+
+.naga-textview { border-radius: 8px; padding: 6px; }
+
+.naga-modifier:checked {
+  background-color: @accent_bg_color;
+  color: @accent_fg_color;
+}

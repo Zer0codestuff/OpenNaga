@@ -1,0 +1,9 @@
+post_install() {
+    udevadm control --reload-rules 2>/dev/null
+    udevadm trigger --action=change --subsystem-match=input --subsystem-match=hidraw --subsystem-match=misc 2>/dev/null
+    echo "OpenNaga: if remapping reports missing access, reconnect the receiver or sign out and back in."
+}
+
+post_upgrade() {
+    post_install
+}

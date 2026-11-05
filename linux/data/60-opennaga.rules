@@ -1,0 +1,10 @@
+# OpenNaga: access for the user signed in at the seat, only for the
+# Razer Naga V2 HyperSpeed. https://github.com/Zer0codestuff/OpenNaga
+# USB receiver 1532:00b4: input events (remapping) and hidraw (DPI,
+# polling rate and mouse memory).
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="00b4", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="00b4", TAG+="uaccess"
+# Bluetooth LE (068e:00b5): input events.
+SUBSYSTEM=="input", KERNEL=="event*", KERNELS=="0005:068E:00B5.*", TAG+="uaccess"
+# Virtual keyboard and mouse that carry remapped output.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

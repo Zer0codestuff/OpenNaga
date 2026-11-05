@@ -1,0 +1,47 @@
+name: Linux release
+
+# Builds the Linux archive on Ubuntu 24.04 (glibc 2.39, GTK 4.14,
+# libadwaita 1.5) so it runs on that release and newer distributions, and
+# attaches it to the GitHub release whose tag starts with linux-v.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the archive to (linux-v...)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'linux-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Install GTK and libadwaita
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Test
+        working-directory: linux
+        run: cargo test --locked
+      - name: Build
+        working-directory: linux
+        run: cargo build --locked --release
+      - name: Check the version matches the tag
+        working-directory: linux
+        run: test "linux-v$(./target/release/opennaga --version | cut -d' ' -f2)" = "$TAG"
+      - name: Pack and upload
+        working-directory: linux
+        run: |
+          packaging/make-archive.sh "$RUNNER_TEMP/dist"
+          gh release upload "$TAG" "$RUNNER_TEMP"/dist/* --clobber

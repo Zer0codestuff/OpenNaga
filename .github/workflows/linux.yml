@@ -1,0 +1,37 @@
+name: Validate Linux build
+
+on:
+  push:
+    branches: [main]
+    paths: ["linux/**", ".github/workflows/linux.yml"]
+  pull_request:
+    paths: ["linux/**", ".github/workflows/linux.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    # Ubuntu 24.04 ships GTK 4.14 and libadwaita 1.5, the oldest versions supported.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK and libadwaita
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-4-dev libadwaita-1-dev desktop-file-utils
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component clippy && rustup default stable
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Run tests
+        run: cargo test --locked
+      - name: Build the release executable
+        run: cargo build --locked --release
+      - name: Validate the desktop entry
+        run: desktop-file-validate data/io.github.zer0codestuff.OpenNaga.desktop
+      - name: Stage an install
+        run: DESTDIR="$RUNNER_TEMP/stage" ./install.sh --prefix /usr --no-build --udev && test -x "$RUNNER_TEMP/stage/usr/bin/opennaga"

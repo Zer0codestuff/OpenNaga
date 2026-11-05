@@ -1,0 +1,47 @@
+# Builds OpenNaga for Linux from the main branch.
+pkgname=opennaga-git
+pkgver=r0
+pkgrel=1
+pkgdesc="Button remapping, DPI and mouse memory for the Razer Naga V2 HyperSpeed"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Zer0codestuff/OpenNaga"
+license=('MIT')
+depends=('gtk4' 'libadwaita' 'glib2' 'pango' 'cairo' 'gdk-pixbuf2' 'hicolor-icon-theme')
+makedepends=('cargo' 'git')
+optdepends=('wtype: type characters missing from the keyboard layout on Wayland'
+            'xdotool: type characters missing from the keyboard layout on X11'
+            'xorg-xprop: per-app profiles on X11')
+provides=('opennaga')
+conflicts=('opennaga')
+install=opennaga.install
+source=("OpenNaga::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd OpenNaga
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+    cd OpenNaga/linux
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd OpenNaga/linux
+    export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+    cargo build --frozen --release
+}
+
+check() {
+    cd OpenNaga/linux
+    export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+    cargo test --frozen
+}
+
+package() {
+    cd OpenNaga/linux
+    DESTDIR="$pkgdir" UDEVDIR=/usr/lib/udev/rules.d ./install.sh --prefix /usr --no-build --udev
+    install -Dm644 ../LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

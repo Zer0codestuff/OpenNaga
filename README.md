@@ -33,6 +33,8 @@ Release 2.7.0 adds automatic per-app profile switching in software, including ov
 
 Unreleased source changes add [profile recovery](#profile-backups-and-recovery-unreleased) and [visual macro editing](#macros-and-text-unreleased). These changes are not included in the 2.7.0 download.
 
+A native Linux port with the same window, features and profile format lives in [`linux/`](linux/README.md) (Rust, GTK 4 and libadwaita). A preview build is available as the [Linux 2.8.0 release](https://github.com/Zer0codestuff/OpenNaga/releases/tag/linux-v2.8.0). It builds and passes its automated tests, but it has not been tested with the physical mouse yet.
+
 ## Requirements
 
 - macOS 13.0 or later. The downloadable DMG contains an Apple Silicon build; Intel Macs must build from source.

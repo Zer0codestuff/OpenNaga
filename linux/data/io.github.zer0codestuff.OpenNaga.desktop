@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OpenNaga
+GenericName=Mouse Button Remapping
+Comment=Remap the buttons of the Razer Naga V2 HyperSpeed and set its DPI
+Exec=opennaga
+Icon=io.github.zer0codestuff.OpenNaga
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.zer0codestuff.OpenNaga
+Categories=Settings;HardwareSettings;
+Keywords=Razer;Naga;mouse;buttons;remap;macro;DPI;

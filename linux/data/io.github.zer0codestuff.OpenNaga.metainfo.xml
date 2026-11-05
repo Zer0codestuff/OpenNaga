@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.zer0codestuff.OpenNaga</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>OpenNaga</name>
+  <summary>Remap the buttons of the Razer Naga V2 HyperSpeed</summary>
+  <developer id="io.github.zer0codestuff">
+    <name>Gabriele Monni</name>
+  </developer>
+  <description>
+    <p>
+      OpenNaga gives every button of the Razer Naga V2 HyperSpeed its own action:
+      keyboard shortcuts, text, macros, media and system controls, apps, commands
+      or a profile switch. It is an independent open source project, not affiliated with Razer.
+    </p>
+    <ul>
+      <li>Profiles, with an optional profile per app</li>
+      <li>A Hypershift layer held on any button</li>
+      <li>DPI, polling rate and scroll sensitivity</li>
+      <li>Saving a profile to the mouse memory, with a backup of its original assignments</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.zer0codestuff.OpenNaga.desktop</launchable>
+  <url type="homepage">https://github.com/Zer0codestuff/OpenNaga</url>
+  <url type="bugtracker">https://github.com/Zer0codestuff/OpenNaga/issues</url>
+  <provides>
+    <binary>opennaga</binary>
+    <modalias>usb:v1532p00B4d*</modalias>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <categories>
+    <category>Settings</category>
+    <category>HardwareSettings</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+</component>

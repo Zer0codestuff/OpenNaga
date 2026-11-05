@@ -21,6 +21,21 @@ Naming: the shipped app is `OpenNaga.app` (executable `OpenNaga`, display name O
 - `Utils/ScrollSensitivity`: per-axis 0.1x...5x settings, fractional accumulation, discrete Naga HID scroll correlation and line/fixed-point/pixel/raw/accelerated event scaling. Shift-wheel uses horizontal sensitivity. Continuous, momentum and other-process events bypass scaling.
 - `Utils/DataFolder`: the only place that names the data folder. `importLegacyFilesIfNeeded()` runs first in `main.swift`: it copies `profiles.json`, `onboard-profile.json`, `driver-mode-recovery.json` and `onboard-profile.*.bak.json` from the `NagaController` folder when they are missing in `OpenNaga`, then writes `.legacy-import-done`. It never overwrites, writes to or deletes the older folder; a failed copy leaves the marker out so the next launch retries.
 
+## Linux port (`linux/`)
+
+Rust 2021 crate `opennaga` (GTK 4.14 / libadwaita 1.5 minimum, ksni tray, no tokio), app id `io.github.zer0codestuff.OpenNaga`, data folder `$XDG_CONFIG_HOME/opennaga` (override `OPENNAGA_HOME`). Same `profiles.json` format as macOS: `keyCode` stays a macOS virtual key code and is converted to evdev at output time; `cmd` means Super. Modules mirror the Swift layout: `model` (profile format, store, config, mapper, macro runner, layout, scroll), `hw` (protocol, hidraw transport selected by HID descriptor, onboard store, hardware worker thread with driver-mode journal), `input` (one epoll thread: evdev grab of the Naga nodes, uinput output devices "OpenNaga Virtual Keyboard" and "OpenNaga Virtual Mouse", hidraw vendor report 04 for the DPI buttons; `frame.rs` is the fd-free remapping logic under test), `desktop` (focus tracking for Hyprland, Sway/i3 and X11, desktop system actions, `.desktop` scan, udev rule and autostart), `ui` (GTK window, inspector, panes, dialogs, `--snapshot`). Pointer nodes are grabbed only when controls 15 to 19 are mapped or scroll sensitivity is not 1x. Device access comes from `data/60-opennaga.rules` (`uaccess` for the Naga input/hidraw nodes and uinput), installed from Status through pkexec or by `install.sh --udev`.
+
+```bash
+cd linux
+cargo test                       # unit tests (model, protocol, onboard, mapper, frames)
+cargo clippy --all-targets -- -D warnings
+cargo build --release --locked   # fat LTO, stripped
+./install.sh --user              # or: sudo ./install.sh --no-build [--udev]
+OPENNAGA_HOME=/tmp/x ./target/release/opennaga --snapshot /tmp/ui.png --snapshot-appearance dark
+```
+
+`.github/workflows/linux.yml` builds, lints and tests on Ubuntu 24.04; `packaging/arch/PKGBUILD` builds `opennaga-git` from main. Linux releases use tags `linux-v<version>` (version from `linux/Cargo.toml`), published as GitHub prereleases so the macOS DMG stays Latest; `.github/workflows/linux-release.yml` then builds `opennaga-<version>-x86_64-linux.tar.gz` (via `linux/packaging/make-archive.sh`) on Ubuntu 24.04 and attaches it with a `.sha256`. Notes: `Documentation/release-linux-<version>.md`. First release: `linux-v2.8.0` (2026-11-05), preview, not hardware-tested. Status (2026-11-05): written without hardware tests at the owner's request. Only read-only sysfs inspection of the receiver was done (hidraw interface 0 has the 90-byte feature report; interface 1 carries vendor report 04). Remapping, hidraw writes, Save to Mouse, Bluetooth and sleep/wake on Linux are unverified; do not claim otherwise. All macOS rules above (journaled driver mode, explicit onboard writes, no `0c 01 02`, `onboardOnly`, stop-and-restart macros) apply to the port as well.
+
 ## Build, run, test
 
 ```bash
